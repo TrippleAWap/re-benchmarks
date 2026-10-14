@@ -121,16 +121,16 @@ def build_corpus(config, sources: list[Path] | None = None,
                 obj = build_dir / f"{src.stem}-{vtag}.o"
                 exe = out_dir / f"{src.stem}-{vtag}.exe"
                 _build_variant([gcc], flags, src, obj, exe)
-                entries.append(_manifest_entry(nm, strip, do_strip, obj, exe, src,
-                                               vtag, "pe", config.root))
+                entries.append(_manifest_entry(nm, strip, do_strip, [obj], exe,
+                                               src.name, vtag, "pe", config.root))
 
         if "elf" in formats and elf_cmd is not None:
             for vtag, (flags, do_strip) in VARIANTS.items():
                 obj = build_dir / f"{src.stem}-linux-{vtag}.o"
                 exe = out_dir / f"{src.stem}-linux-{vtag}"
                 _build_variant(elf_cmd, flags, src, obj, exe)
-                entries.append(_manifest_entry(nm, strip, do_strip, obj, exe, src,
-                                               vtag, "elf", config.root))
+                entries.append(_manifest_entry(nm, strip, do_strip, [obj], exe,
+                                               src.name, vtag, "elf", config.root))
 
     manifest = {
         "generated": utcnow().isoformat(),
@@ -146,10 +146,12 @@ def build_corpus(config, sources: list[Path] | None = None,
     return manifest
 
 
-def _manifest_entry(nm: str, strip: str, do_strip: bool, obj: Path, exe: Path,
-                    src: Path, vtag: str, fmt: str, root: Path,
+def _manifest_entry(nm: str, strip: str, do_strip: bool, obj_paths: list[Path],
+                    exe: Path, source_name: str, vtag: str, fmt: str, root: Path,
                     extra: dict | None = None) -> dict:
-    obj_names = set(dump_function_names(nm, obj))
+    obj_names: set[str] = set()
+    for obj in obj_paths:
+        obj_names.update(dump_function_names(nm, obj))
     linked_names = set(dump_function_names(nm, exe))
     gt_names = sorted(obj_names & linked_names)
 
@@ -160,7 +162,7 @@ def _manifest_entry(nm: str, strip: str, do_strip: bool, obj: Path, exe: Path,
 
     entry = {
         "name": exe.name,
-        "source": src.name,
+        "source": source_name,
         "variant": vtag,
         "format": fmt,
         "path": str(exe.relative_to(root)),
@@ -188,19 +190,69 @@ def build_scale_corpus(config, tiers: list[int], strip_binaries: bool = True) ->
     out_dir.mkdir(parents=True, exist_ok=True)
     build_dir.mkdir(parents=True, exist_ok=True)
 
-    from .generator import generate_scale_source, scale_binary_name
+    from .generator import CHUNK_SIZE, generate_scale_sources, scale_binary_name
 
     new_entries = []
+    built_names = set()
     for n in tiers:
-        src = gen_dir / f"{scale_binary_name(n)}.c"
-        src.write_text(generate_scale_source(n), encoding="utf-8")
-        obj = build_dir / f"{scale_binary_name(n)}-d.o"
-        exe = out_dir / f"{scale_binary_name(n)}-d.exe"
-        _build_variant([gcc], ["-O0"], src, obj, exe)
-        new_entries.append(
-            _manifest_entry(nm, strip, strip_binaries, obj, exe, src, "d", "pe",
-                            config.root, extra={"scale": True, "tier": n})
+        tier_dir = gen_dir / f"scale_s{n}"
+        tier_dir.mkdir(parents=True, exist_ok=True)
+        files = generate_scale_sources(n)
+        for fname, content in files.items():
+            (tier_dir / fname).write_text(content, encoding="utf-8")
+
+        objs: list[Path] = []
+        part_sources = sorted(
+            f for f in files if f.endswith(".c") and "_part" in f
         )
+        flags = ["-O0"]
+        for fname in part_sources:
+            obj = build_dir / f"scale_s{n}" / (Path(fname).stem + ".o")
+            obj.parent.mkdir(parents=True, exist_ok=True)
+            proc = subprocess.run(
+                [gcc, *flags, "-c", "-o", str(obj), str(tier_dir / fname)],
+                capture_output=True, text=True,
+            )
+            if proc.returncode != 0:
+                raise CorpusBuildError(
+                    f"compile failed for {fname}: {proc.stderr[-800:]}"
+                )
+            objs.append(obj)
+
+        main_obj = build_dir / f"scale_s{n}" / "main.o"
+        proc = subprocess.run(
+            [gcc, *flags, "-c", "-o", str(main_obj),
+             str(tier_dir / f"scale_s{n}_main.c")],
+            capture_output=True, text=True,
+        )
+        if proc.returncode != 0:
+            raise CorpusBuildError(
+                f"compile failed for scale_s{n}_main.c: {proc.stderr[-800:]}"
+            )
+        objs.append(main_obj)
+
+        exe = out_dir / f"{scale_binary_name(n)}-d.exe"
+        proc = subprocess.run(
+            [gcc, *flags, "-o", str(exe), *[str(o) for o in objs]],
+            capture_output=True, text=True,
+        )
+        if proc.returncode != 0:
+            raise CorpusBuildError(
+                f"link failed for scale_s{n}: {proc.stderr[-800:]}"
+            )
+
+        built_names.add(exe.name)
+        new_entries.append(
+            _manifest_entry(nm, strip, strip_binaries, objs, exe,
+                            f"scale_s{n} ({len(part_sources) + 1} TUs, "
+                            f"chunks of {CHUNK_SIZE})",
+                            "d", "pe", config.root,
+                            extra={"scale": True, "tier": n})
+        )
+
+    for stale in out_dir.iterdir():
+        if stale.is_file() and stale.name not in built_names:
+            stale.unlink()
 
     manifest = {}
     if config.corpus.manifest.exists():

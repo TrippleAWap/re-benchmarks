@@ -163,7 +163,7 @@ def corpus_list() -> None:
 
 @corpus_app.command("scale")
 def corpus_scale(
-    tiers: str = typer.Option("100,500,2000,5000", "--tiers", help="Comma-separated function counts, e.g. 100,500,2000,5000"),
+    tiers: str = typer.Option("100,1000,5000,20000,50000", "--tiers", help="Comma-separated function counts, e.g. 100,1000,10000,50000"),
     no_strip: bool = typer.Option(False, "--no-strip", help="Keep symbols in scale binaries"),
 ) -> None:
     """Generate and build scaling binaries (N functions per tier)."""
@@ -270,7 +270,7 @@ def ui(
 
 @app.command("report")
 def report(
-    session_id: Optional[str] = typer.Option(None, "--session", help="Session id (default: latest)"),
+    session_id: Optional[str] = typer.Option(None, "--session", help="Session id, or comma-separated ids to merge (default: latest)"),
     out: Optional[Path] = typer.Option(None, "--out", help="Output directory"),
 ) -> None:
     """Render charts and a markdown report for a benchmark session."""
@@ -282,18 +282,28 @@ def report(
 
     config = Config.load()
     if session_id:
-        path = config.run.results_dir / f"{session_id}.jsonl"
-        if not path.exists():
-            console.print(f"[red]error:[/red] session not found: {path}")
-            raise typer.Exit(1)
+        ids = [s.strip() for s in session_id.split(",") if s.strip()]
+        sessions = []
+        for sid in ids:
+            p = config.run.results_dir / f"{sid}.jsonl"
+            if not p.exists():
+                console.print(f"[red]error:[/red] session not found: {p}")
+                raise typer.Exit(1)
+            sessions.append(load_session(p))
     else:
         found = list_sessions(config.run.results_dir)
         if not found:
             console.print("[red]error:[/red] no sessions recorded yet - run 'rebench run' first")
             raise typer.Exit(1)
-        path = found[-1]
+        sessions = [load_session(found[-1])]
 
-    session = load_session(path)
+    session = sessions[0]
+    if len(sessions) > 1:
+        session.started_at = min(s.started_at for s in sessions)
+        session.finished_at = max(s.finished_at for s in sessions)
+        session.runs = [r for s in sessions for r in s.runs]
+        session.id = "+".join(s.id for s in sessions)
+        session.tag = ",".join(sorted({s.tag for s in sessions if s.tag}))
     scores = []
     scale_entries: list[dict] = []
     scaling_chart = None
