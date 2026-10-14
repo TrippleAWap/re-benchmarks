@@ -187,6 +187,54 @@ def _print_summary(session: SessionResult) -> None:
     console.print(table)
 
 
+@app.command("report")
+def report(
+    session_id: Optional[str] = typer.Option(None, "--session", help="Session id (default: latest)"),
+    out: Optional[Path] = typer.Option(None, "--out", help="Output directory"),
+) -> None:
+    """Render charts and a markdown report for a benchmark session."""
+    from .corpus.builder import load_manifest
+    from .metrics.compare import score_session
+    from .report.charts import make_charts
+    from .report.summary import markdown_report
+    from .store import list_sessions, load_session
+
+    config = Config.load()
+    if session_id:
+        path = config.run.results_dir / f"{session_id}.jsonl"
+        if not path.exists():
+            console.print(f"[red]error:[/red] session not found: {path}")
+            raise typer.Exit(1)
+    else:
+        found = list_sessions(config.run.results_dir)
+        if not found:
+            console.print("[red]error:[/red] no sessions recorded yet - run 'rebench run' first")
+            raise typer.Exit(1)
+        path = found[-1]
+
+    session = load_session(path)
+    scores = []
+    try:
+        manifest = load_manifest(config.corpus.manifest)
+        scores = score_session(session, manifest)
+    except Exception as e:
+        console.print(f"[yellow]accuracy scoring unavailable:[/yellow] {e}")
+
+    out_dir = out or (config.run.results_dir / f"report-{session.id}")
+    try:
+        charts = make_charts(session, scores, out_dir)
+    except ImportError:
+        console.print("[red]error:[/red] matplotlib missing - install with: pip install rebench[charts]")
+        raise typer.Exit(1)
+
+    md = out_dir / "report.md"
+    md.write_text(markdown_report(session, scores, charts), encoding="utf-8")
+
+    for c in charts:
+        console.print(f"  [blue]chart[/blue] {c}")
+    console.print(f"[green]report written[/green] {md}")
+
+
 def main() -> None:
     app()
 
