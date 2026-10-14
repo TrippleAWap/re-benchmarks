@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rebench"
+version = "0.1.0"
+description = "Benchmark harness for reverse-engineering tools"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.12",
+    "rich>=13",
+    "psutil>=5.9",
+    "pefile>=2023.2.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+tui = ["textual>=0.60"]
+charts = ["matplotlib>=3.8"]
+
+[project.scripts]
+rebench = "rebench.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["rebench*"]

@@ -1,0 +1,30 @@
+[run]
+timeout_s = 600
+repeats = 1
+results_dir = "results"
+
+[corpus]
+dir = "corpus/binaries"
+manifest = "corpus/manifest.json"
+sources = "corpus/sources"
+
+[tools.baseline]
+enabled = true
+
+[tools.r2]
+enabled = true
+# path = "C:\\path\\to\\r2.exe"
+
+[tools.ghidra]
+enabled = true
+# install_dir = "C:\\ghidra_11.3.2_PUBLIC"
+
+[tools.ida]
+enabled = true
+# install_dir = "C:\\Program Files\\IDA Professional 9.2"
+
+[tools.binaryninja]
+enabled = true
+
+[tools.angr]
+enabled = false
