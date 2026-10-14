@@ -35,18 +35,21 @@ class BinaryNinjaAdapter(ToolAdapter):
         except ImportError as e:
             raise ToolNotInstalledError(f"binaryninja not importable: {e}") from e
 
+        holder: dict = {}
+
         def _work() -> dict:
             bv = binaryninja.load(str(binary))
             if bv is None:
                 raise AnalysisFailedError("binary ninja failed to open binary")
+            holder["bv"] = bv
             try:
                 bv.update_analysis_and_wait()
                 functions = list(bv.functions)
-                named = 0
-                for f in functions:
-                    name = f.name or ""
-                    if name and not name.startswith(_AUTO_PREFIXES) and not name[0].isdigit():
-                        named += 1
+                names = [f.name or "" for f in functions]
+                named = sum(
+                    1 for n in names
+                    if n and not n.startswith(_AUTO_PREFIXES) and not n[0].isdigit()
+                )
                 imports = len(
                     bv.get_symbols_of_type(binaryninja.SymbolType.ImportAddressSymbol)
                 )
@@ -58,6 +61,7 @@ class BinaryNinjaAdapter(ToolAdapter):
                 return {
                     "functions": len(functions),
                     "named_functions": named,
+                    "function_names": names[:10000],
                     "imports": imports,
                     "exports": exports,
                     "symbols": symbols,
@@ -72,6 +76,12 @@ class BinaryNinjaAdapter(ToolAdapter):
             future = executor.submit(_work)
             stats = future.result(timeout=timeout_s)
         except concurrent.futures.TimeoutError:
+            bv = holder.get("bv")
+            if bv is not None:
+                try:
+                    bv.abort_analysis()
+                except Exception:
+                    pass
             raise AnalysisFailedError(
                 f"binary ninja timed out after {timeout_s:.0f}s"
             ) from None

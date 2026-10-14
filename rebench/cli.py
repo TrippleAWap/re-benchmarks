@@ -108,6 +108,7 @@ def corpus_build() -> None:
         raise typer.Exit(1)
     table = Table(title="corpus built", expand=True)
     table.add_column("binary", style="cyan")
+    table.add_column("format")
     table.add_column("variant")
     table.add_column("gt functions", justify="right")
     table.add_column("size", justify="right")
@@ -115,12 +116,15 @@ def corpus_build() -> None:
     for entry in manifest["entries"]:
         table.add_row(
             entry["name"],
+            entry.get("format", "pe"),
             entry["variant"],
             str(entry["ground_truth"]["function_count"]),
             f"{entry['size_bytes'] / 1024:.0f}K",
             entry["sha256"][:12],
         )
     console.print(table)
+    if manifest.get("elf_skipped"):
+        console.print("[yellow]ELF variants skipped - no cross toolchain (install zig, or x86_64-linux-gnu-gcc)[/yellow]")
     console.print(f"[green]manifest saved[/green] {config.corpus.manifest}")
 
 
@@ -137,6 +141,7 @@ def corpus_list() -> None:
         raise typer.Exit(1)
     table = Table(title=f"corpus (generated {manifest.get('generated', '?')})", expand=True)
     table.add_column("binary", style="cyan")
+    table.add_column("format")
     table.add_column("source")
     table.add_column("variant")
     table.add_column("gt functions", justify="right")
@@ -144,6 +149,7 @@ def corpus_list() -> None:
     for entry in manifest["entries"]:
         table.add_row(
             entry["name"],
+            entry.get("format", "pe"),
             entry.get("source", "-"),
             entry.get("variant", "-"),
             str(entry["ground_truth"]["function_count"]),

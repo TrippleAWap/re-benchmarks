@@ -27,4 +27,4 @@ enabled = true
 enabled = true
 
 [tools.angr]
-enabled = false
+enabled = true

@@ -1,13 +1,16 @@
 {
-  "generated": "2026-10-14T00:57:27.462489+00:00",
+  "generated": "2026-10-14T01:58:10.806328+00:00",
   "gcc": "C:\\ProgramData\\mingw64\\mingw64\\bin\\gcc.EXE",
+  "elf_toolchain": "zig cc -target x86_64-linux-musl -static",
+  "elf_skipped": false,
   "entries": [
     {
       "name": "minicrypt-d.exe",
       "source": "minicrypt.c",
       "variant": "d",
+      "format": "pe",
       "path": "corpus\\binaries\\minicrypt-d.exe",
-      "sha256": "9f8f099077c3e690b9d2c28541e24b9ae7ad64f617a360a13a30926e6b3f37f6",
+      "sha256": "f05c8488d4d73e61602b3a34556173462e6e59d9a374004b59a79b947195316a",
       "size_bytes": 17920,
       "ground_truth": {
         "function_names": [
@@ -31,8 +34,9 @@
       "name": "minicrypt-o2.exe",
       "source": "minicrypt.c",
       "variant": "o2",
+      "format": "pe",
       "path": "corpus\\binaries\\minicrypt-o2.exe",
-      "sha256": "34080add19a6d267cb855b1cb1f64a31207d1b3c4473c7f190ab841c8015f52b",
+      "sha256": "d4b443ba7270b86168d9db8dcf4cf9dc5840ad74e7486feccbf5a0fb626a5a32",
       "size_bytes": 16896,
       "ground_truth": {
         "function_names": [
@@ -56,8 +60,9 @@
       "name": "minicrypt-sym.exe",
       "source": "minicrypt.c",
       "variant": "sym",
+      "format": "pe",
       "path": "corpus\\binaries\\minicrypt-sym.exe",
-      "sha256": "6976e8124b5855512dc88b2d09eb03ade9ebea5f8f9cb0cfb1b364d97522db6e",
+      "sha256": "8321f9ab2995fddecda689a81de69a60f51548498d66de32195761a9117ea0e3",
       "size_bytes": 60667,
       "ground_truth": {
         "function_names": [
@@ -78,11 +83,86 @@
       }
     },
     {
+      "name": "minicrypt-linux-d",
+      "source": "minicrypt.c",
+      "variant": "d",
+      "format": "elf",
+      "path": "corpus\\binaries\\minicrypt-linux-d",
+      "sha256": "bd5fccc9a48db175d87f00f71067aaed9c53710fde6c6334c6626e9026104647",
+      "size_bytes": 448792,
+      "ground_truth": {
+        "function_names": [
+          "b64_val",
+          "base64_decode",
+          "base64_encode",
+          "crc32_simple",
+          "lcg_next",
+          "main",
+          "mix_seed",
+          "rot13_buf",
+          "tea_decrypt",
+          "tea_encrypt",
+          "xor_stream"
+        ],
+        "function_count": 11
+      }
+    },
+    {
+      "name": "minicrypt-linux-o2",
+      "source": "minicrypt.c",
+      "variant": "o2",
+      "format": "elf",
+      "path": "corpus\\binaries\\minicrypt-linux-o2",
+      "sha256": "942058d4b7bd39b8101f823fd575c3ce834e38948c53397e5cb17c23912f8805",
+      "size_bytes": 6128,
+      "ground_truth": {
+        "function_names": [
+          "base64_decode",
+          "base64_encode",
+          "crc32_simple",
+          "lcg_next",
+          "main",
+          "mix_seed",
+          "rot13_buf",
+          "tea_decrypt",
+          "tea_encrypt",
+          "xor_stream"
+        ],
+        "function_count": 10
+      }
+    },
+    {
+      "name": "minicrypt-linux-sym",
+      "source": "minicrypt.c",
+      "variant": "sym",
+      "format": "elf",
+      "path": "corpus\\binaries\\minicrypt-linux-sym",
+      "sha256": "a022717f160679bcf81dfc5a49550454a2ca39ccd0b74f64dd91da8d2b1da797",
+      "size_bytes": 2576056,
+      "ground_truth": {
+        "function_names": [
+          "b64_val",
+          "base64_decode",
+          "base64_encode",
+          "crc32_simple",
+          "lcg_next",
+          "main",
+          "mix_seed",
+          "rot13_buf",
+          "tea_decrypt",
+          "tea_encrypt",
+          "xor_stream"
+        ],
+        "function_count": 11
+      }
+    },
+    {
       "name": "parsebuf-d.exe",
       "source": "parsebuf.c",
       "variant": "d",
+      "format": "pe",
       "path": "corpus\\binaries\\parsebuf-d.exe",
-      "sha256": "18a6da9bea73e28ee5bf5c77f0088a5aa3f6363bfb595be6a7b41efc768b0a0f",
+      "sha256": "9e28c9e5bda1f69a5ae5493836c79effbaca8104b1f07bd99eaecceeb46b547b",
       "size_bytes": 17920,
       "ground_truth": {
         "function_names": [
@@ -105,8 +185,9 @@
       "name": "parsebuf-o2.exe",
       "source": "parsebuf.c",
       "variant": "o2",
+      "format": "pe",
       "path": "corpus\\binaries\\parsebuf-o2.exe",
-      "sha256": "c4d8cd36dc9a23a85ddb97c97270da94080367ab14a6b746027bdaf61ae3c0eb",
+      "sha256": "78c0b2c6a0287ea529fae6a11b653c99567f7741dc825380e7075e71a21fc262",
       "size_bytes": 17408,
       "ground_truth": {
         "function_names": [
@@ -130,8 +211,9 @@
       "name": "parsebuf-sym.exe",
       "source": "parsebuf.c",
       "variant": "sym",
+      "format": "pe",
       "path": "corpus\\binaries\\parsebuf-sym.exe",
-      "sha256": "0d1e39b89d78ba1705a0a9065bdad544733115369e7e1a91f46a34dc8c86aebf",
+      "sha256": "684ac6f167e7df85fb1c599543b87073985b38daa9b1da475d7211477d3a60e5",
       "size_bytes": 60245,
       "ground_truth": {
         "function_names": [
@@ -151,11 +233,84 @@
       }
     },
     {
+      "name": "parsebuf-linux-d",
+      "source": "parsebuf.c",
+      "variant": "d",
+      "format": "elf",
+      "path": "corpus\\binaries\\parsebuf-linux-d",
+      "sha256": "1f640148a741095b08e287468007b838f265be8ff556f1b1c1217766c850ec3e",
+      "size_bytes": 446816,
+      "ground_truth": {
+        "function_names": [
+          "is_digits",
+          "main",
+          "match_brackets",
+          "parse_hex",
+          "parse_int",
+          "parse_ipv4",
+          "skip_ws",
+          "tokenize",
+          "trim",
+          "url_decode"
+        ],
+        "function_count": 10
+      }
+    },
+    {
+      "name": "parsebuf-linux-o2",
+      "source": "parsebuf.c",
+      "variant": "o2",
+      "format": "elf",
+      "path": "corpus\\binaries\\parsebuf-linux-o2",
+      "sha256": "7941780890b118862228d47f5e46494af85c7be33ac1fa8c35d5792334c26364",
+      "size_bytes": 8656,
+      "ground_truth": {
+        "function_names": [
+          "is_digits",
+          "main",
+          "match_brackets",
+          "parse_hex",
+          "parse_int",
+          "parse_ipv4",
+          "skip_ws",
+          "tokenize",
+          "trim",
+          "url_decode"
+        ],
+        "function_count": 10
+      }
+    },
+    {
+      "name": "parsebuf-linux-sym",
+      "source": "parsebuf.c",
+      "variant": "sym",
+      "format": "elf",
+      "path": "corpus\\binaries\\parsebuf-linux-sym",
+      "sha256": "7439ec42c22b1aeafab06e5ed027ce5064155ead313c18476619c581dd0f500a",
+      "size_bytes": 2576832,
+      "ground_truth": {
+        "function_names": [
+          "is_digits",
+          "main",
+          "match_brackets",
+          "parse_hex",
+          "parse_int",
+          "parse_ipv4",
+          "skip_ws",
+          "tokenize",
+          "trim",
+          "url_decode"
+        ],
+        "function_count": 10
+      }
+    },
+    {
       "name": "stringutils-d.exe",
       "source": "stringutils.c",
       "variant": "d",
+      "format": "pe",
       "path": "corpus\\binaries\\stringutils-d.exe",
-      "sha256": "19fc68380f62903658ec57df0d5ae5f89075cbb62e3aa2ebacf97337845aab18",
+      "sha256": "4abbf53843d62574d2658142249db0880e0e0246c716b18a0cd9b63ab608f8da",
       "size_bytes": 16384,
       "ground_truth": {
         "function_names": [
@@ -179,8 +334,9 @@
       "name": "stringutils-o2.exe",
       "source": "stringutils.c",
       "variant": "o2",
+      "format": "pe",
       "path": "corpus\\binaries\\stringutils-o2.exe",
-      "sha256": "b61f91dd6b06a8fb0b32ad53826bd4374bf0ea1a2294721b9df3d9c2a36f7d86",
+      "sha256": "2c90b1ee694a7a1faa7452f740636ac7bb330e036769fb800061bb8ddaf04c31",
       "size_bytes": 15872,
       "ground_truth": {
         "function_names": [
@@ -205,8 +361,9 @@
       "name": "stringutils-sym.exe",
       "source": "stringutils.c",
       "variant": "sym",
+      "format": "pe",
       "path": "corpus\\binaries\\stringutils-sym.exe",
-      "sha256": "7d65eb0c9f12a16d8bbfa1b88bf67d9302cbb4f991d718c19dbad292e6f09808",
+      "sha256": "00ad5d9b5ec7266849b8bd9ccacd3f2a396ab6a3b5f78280424d0f935dc1e2ed",
       "size_bytes": 58608,
       "ground_truth": {
         "function_names": [
@@ -224,6 +381,81 @@
           "word_count"
         ],
         "function_count": 12
+      }
+    },
+    {
+      "name": "stringutils-linux-d",
+      "source": "stringutils.c",
+      "variant": "d",
+      "format": "elf",
+      "path": "corpus\\binaries\\stringutils-linux-d",
+      "sha256": "7550f493d31a3a75cff6772d90a789e5045eda3cf291bbef06e3797a5ab16443",
+      "size_bytes": 441392,
+      "ground_truth": {
+        "function_names": [
+          "caesar_shift",
+          "count_vowels",
+          "find_char",
+          "fnv1a_hash",
+          "is_palindrome",
+          "main",
+          "starts_with",
+          "str_length",
+          "str_reverse",
+          "to_upper",
+          "word_count"
+        ],
+        "function_count": 11
+      }
+    },
+    {
+      "name": "stringutils-linux-o2",
+      "source": "stringutils.c",
+      "variant": "o2",
+      "format": "elf",
+      "path": "corpus\\binaries\\stringutils-linux-o2",
+      "sha256": "4b2bd620fed9444918bb67555f6863aec8c3dabd4b48bd538fd985be2db1491f",
+      "size_bytes": 5344,
+      "ground_truth": {
+        "function_names": [
+          "caesar_shift",
+          "count_vowels",
+          "find_char",
+          "fnv1a_hash",
+          "is_palindrome",
+          "main",
+          "starts_with",
+          "str_length",
+          "str_reverse",
+          "to_upper",
+          "word_count"
+        ],
+        "function_count": 11
+      }
+    },
+    {
+      "name": "stringutils-linux-sym",
+      "source": "stringutils.c",
+      "variant": "sym",
+      "format": "elf",
+      "path": "corpus\\binaries\\stringutils-linux-sym",
+      "sha256": "a21f1c280be8ae107bd58709229a098261a0ecc604f198556352105d5a7b8ee1",
+      "size_bytes": 2569536,
+      "ground_truth": {
+        "function_names": [
+          "caesar_shift",
+          "count_vowels",
+          "find_char",
+          "fnv1a_hash",
+          "is_palindrome",
+          "main",
+          "starts_with",
+          "str_length",
+          "str_reverse",
+          "to_upper",
+          "word_count"
+        ],
+        "function_count": 11
       }
     }
   ]

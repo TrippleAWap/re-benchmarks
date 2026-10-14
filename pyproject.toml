@@ -12,12 +12,14 @@ dependencies = [
     "rich>=13",
     "psutil>=5.9",
     "pefile>=2023.2.7",
+    "pyelftools>=3.1",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 tui = ["textual>=0.60"]
 charts = ["matplotlib>=3.8"]
+angr = ["angr>=9.2", "bitstring<5"]
 
 [project.scripts]
 rebench = "rebench.cli:main"

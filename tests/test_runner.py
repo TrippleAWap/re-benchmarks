@@ -16,8 +16,9 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_baseline_stats():
+def test_baseline_stats(tmp_path):
     config = Config.load()
+    config.run.results_dir = tmp_path
     session = run_session(config, tool_names=["baseline"], binary_paths=[PING])
     assert len(session.runs) == 1
     run = session.runs[0]
@@ -27,8 +28,9 @@ def test_baseline_stats():
     assert run.wall_time_s > 0
 
 
-def test_run_skips_uninstalled_adapters():
+def test_run_skips_uninstalled_adapters(tmp_path):
     config = Config.load()
+    config.run.results_dir = tmp_path
     session = run_session(config, tool_names=["ghidra", "baseline"], binary_paths=[PING])
     by_tool = {r.tool: r for r in session.runs}
     assert by_tool["baseline"].ok
@@ -37,6 +39,7 @@ def test_run_skips_uninstalled_adapters():
 
 def test_store_roundtrip(tmp_path):
     config = Config.load()
+    config.run.results_dir = tmp_path / "res"
     session = run_session(config, tool_names=["baseline"], binary_paths=[PING])
     out = save_session(tmp_path, session)
     assert out.exists()

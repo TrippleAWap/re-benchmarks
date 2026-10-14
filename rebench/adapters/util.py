@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import psutil
 
@@ -86,6 +87,31 @@ def parse_marked_sections(text: str, prefix: str = "R2B_") -> dict[str, str]:
         elif current is not None:
             sections[current].append(line)
     return {k: "\n".join(v).strip() for k, v in sections.items()}
+
+
+def count_printable_runs(path: Path, min_len: int = 5) -> int:
+    data = Path(path).read_bytes()
+    total = 0
+    run = 0
+    for b in data:
+        if 32 <= b <= 126:
+            run += 1
+        else:
+            if run >= min_len:
+                total += 1
+            run = 0
+    if run >= min_len:
+        total += 1
+    return total
+
+
+def detect_format(path: Path) -> str:
+    magic = Path(path).read_bytes()[:4]
+    if magic[:2] == b"MZ":
+        return "pe"
+    if magic == b"\x7fELF":
+        return "elf"
+    raise ValueError(f"unsupported binary format: {magic!r}")
 
 
 def kill_tree(pid: int) -> None:

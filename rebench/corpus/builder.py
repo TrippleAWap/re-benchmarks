@@ -7,7 +7,13 @@ from pathlib import Path
 
 from ..models import sha256_file, utcnow
 
-VARIANTS: dict[str, tuple[list[str], bool]] = {
+PE_VARIANTS: dict[str, tuple[list[str], bool]] = {
+    "d": (["-O0"], True),
+    "o2": (["-O2"], True),
+    "sym": (["-O0", "-g"], False),
+}
+
+ELF_VARIANTS: dict[str, tuple[list[str], bool]] = {
     "d": (["-O0"], True),
     "o2": (["-O2"], True),
     "sym": (["-O0", "-g"], False),
@@ -27,16 +33,25 @@ def _require_tool(name: str) -> str:
     return found
 
 
-def dump_function_names(nm: str, exe: Path) -> list[str]:
+def find_elf_toolchain() -> list[str] | None:
+    if shutil.which("zig"):
+        return ["zig", "cc", "-target", "x86_64-linux-musl", "-static"]
+    gnu = shutil.which("x86_64-linux-gnu-gcc")
+    if gnu:
+        return [gnu, "-static"]
+    return None
+
+
+def dump_function_names(nm: str, image: Path) -> list[str]:
     proc = subprocess.run(
-        [nm, "--defined-only", str(exe)],
+        [nm, "--defined-only", str(image)],
         capture_output=True,
         text=True,
         encoding="utf-8",
         errors="replace",
     )
     if proc.returncode != 0:
-        raise CorpusBuildError(f"nm failed on {exe}: {proc.stderr[-400:]}")
+        raise CorpusBuildError(f"nm failed on {image}: {proc.stderr[-400:]}")
     names = []
     for line in proc.stdout.splitlines():
         parts = line.split()
@@ -57,15 +72,46 @@ def sources_dir(config) -> Path:
     raise CorpusBuildError(f"sources dir not found: {config.corpus.sources}")
 
 
-def build_corpus(config) -> dict:
+def _build_variant(
+    compile_cmd: list[str],
+    flags: list[str],
+    src: Path,
+    obj: Path,
+    image: Path,
+) -> None:
+    proc = subprocess.run(
+        [*compile_cmd, *flags, "-c", "-o", str(obj), str(src)],
+        capture_output=True, text=True,
+    )
+    if proc.returncode != 0:
+        raise CorpusBuildError(
+            f"compile failed for {src.name} -> {image.name}: {proc.stderr[-800:]}"
+        )
+
+    proc = subprocess.run(
+        [*compile_cmd, *flags, "-o", str(image), str(obj)],
+        capture_output=True, text=True,
+    )
+    if proc.returncode != 0:
+        raise CorpusBuildError(
+            f"link failed for {src.name} -> {image.name}: {proc.stderr[-800:]}"
+        )
+
+
+def build_corpus(config, sources: list[Path] | None = None,
+                 formats: list[str] | None = None) -> dict:
     gcc = _require_tool("gcc")
     nm = _require_tool("nm")
     strip = _require_tool("strip")
 
     src_dir = sources_dir(config)
-    sources = sorted(src_dir.glob("*.c"))
+    if sources is None:
+        sources = sorted(src_dir.glob("*.c"))
     if not sources:
         raise CorpusBuildError(f"no .c sources in {src_dir}")
+
+    formats = formats or ["pe", "elf"]
+    elf_cmd = find_elf_toolchain() if "elf" in formats else None
 
     out_dir = config.corpus.dir
     build_dir = config.root / "corpus" / "build"
@@ -73,56 +119,30 @@ def build_corpus(config) -> dict:
     build_dir.mkdir(parents=True, exist_ok=True)
 
     entries = []
+    elf_skipped = "elf" in formats and elf_cmd is None
+
     for src in sources:
-        for vtag, (flags, do_strip) in VARIANTS.items():
-            obj = build_dir / f"{src.stem}-{vtag}.o"
-            exe = out_dir / f"{src.stem}-{vtag}.exe"
+        if "pe" in formats:
+            for vtag, (flags, do_strip) in PE_VARIANTS.items():
+                obj = build_dir / f"{src.stem}-{vtag}.o"
+                exe = out_dir / f"{src.stem}-{vtag}.exe"
+                _build_variant([gcc], flags, src, obj, exe)
+                entries.append(_manifest_entry(nm, strip, do_strip, obj, exe, src,
+                                               vtag, "pe", config.root))
 
-            proc = subprocess.run(
-                [gcc, *flags, "-c", "-o", str(obj), str(src)],
-                capture_output=True, text=True,
-            )
-            if proc.returncode != 0:
-                raise CorpusBuildError(
-                    f"compile failed for {src.name} [{vtag}]: {proc.stderr[-800:]}"
-                )
-
-            proc = subprocess.run(
-                [gcc, *flags, "-o", str(exe), str(obj)],
-                capture_output=True, text=True,
-            )
-            if proc.returncode != 0:
-                raise CorpusBuildError(
-                    f"link failed for {src.name} [{vtag}]: {proc.stderr[-800:]}"
-                )
-
-            obj_names = set(dump_function_names(nm, obj))
-            linked_names = set(dump_function_names(nm, exe))
-            gt_names = sorted(obj_names & linked_names)
-
-            if do_strip:
-                strip_proc = subprocess.run([strip, str(exe)], capture_output=True, text=True)
-                if strip_proc.returncode != 0:
-                    raise CorpusBuildError(f"strip failed for {exe}: {strip_proc.stderr[-400:]}")
-
-            entries.append(
-                {
-                    "name": exe.name,
-                    "source": src.name,
-                    "variant": vtag,
-                    "path": str(exe.relative_to(config.root)),
-                    "sha256": sha256_file(exe),
-                    "size_bytes": exe.stat().st_size,
-                    "ground_truth": {
-                        "function_names": gt_names,
-                        "function_count": len(gt_names),
-                    },
-                }
-            )
+        if "elf" in formats and elf_cmd is not None:
+            for vtag, (flags, do_strip) in ELF_VARIANTS.items():
+                obj = build_dir / f"{src.stem}-linux-{vtag}.o"
+                exe = out_dir / f"{src.stem}-linux-{vtag}"
+                _build_variant(elf_cmd, flags, src, obj, exe)
+                entries.append(_manifest_entry(nm, strip, do_strip, obj, exe, src,
+                                               vtag, "elf", config.root))
 
     manifest = {
         "generated": utcnow().isoformat(),
         "gcc": gcc,
+        "elf_toolchain": " ".join(elf_cmd) if elf_cmd else None,
+        "elf_skipped": elf_skipped,
         "entries": entries,
     }
     config.corpus.manifest.parent.mkdir(parents=True, exist_ok=True)
@@ -130,6 +150,32 @@ def build_corpus(config) -> dict:
         json.dumps(manifest, indent=2), encoding="utf-8"
     )
     return manifest
+
+
+def _manifest_entry(nm: str, strip: str, do_strip: bool, obj: Path, exe: Path,
+                    src: Path, vtag: str, fmt: str, root: Path) -> dict:
+    obj_names = set(dump_function_names(nm, obj))
+    linked_names = set(dump_function_names(nm, exe))
+    gt_names = sorted(obj_names & linked_names)
+
+    if do_strip:
+        strip_proc = subprocess.run([strip, str(exe)], capture_output=True, text=True)
+        if strip_proc.returncode != 0:
+            raise CorpusBuildError(f"strip failed for {exe}: {strip_proc.stderr[-400:]}")
+
+    return {
+        "name": exe.name,
+        "source": src.name,
+        "variant": vtag,
+        "format": fmt,
+        "path": str(exe.relative_to(root)),
+        "sha256": sha256_file(exe),
+        "size_bytes": exe.stat().st_size,
+        "ground_truth": {
+            "function_names": gt_names,
+            "function_count": len(gt_names),
+        },
+    }
 
 
 def load_manifest(path: Path) -> dict:

@@ -15,8 +15,9 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_tui_dashboard_smoke():
+def test_tui_dashboard_smoke(tmp_path):
     config = Config.load()
+    config.run.results_dir = tmp_path
 
     async def main() -> None:
         app = BenchApp(

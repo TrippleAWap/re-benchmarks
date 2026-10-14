@@ -55,12 +55,12 @@ Results land in `results/<session-id>.jsonl`; reports in `results/report-<id>/`
 
 | tool | kind | detection |
 |---|---|---|
-| baseline (pefile) | python lib | installed with rebench |
+| baseline (pefile + pyelftools) | python lib | installed with rebench |
 | radare2 / rizin | CLI (`aaa` + JSON) | PATH, common install dirs |
 | Ghidra | headless `analyzeHeadless` | `GHIDRA_INSTALL_DIR` env or `[tools.ghidra] install_dir` |
 | IDA | `idat.exe` + IDAPython | `C:\Program Files\IDA*` or `[tools.ida] install_dir` |
 | Binary Ninja | python API | `binaryninja` module (needs license) |
-| angr | python API | `angr` module |
+| angr | python API, isolated subprocess | `pip install rebench[angr]` |
 
 Missing tools are skipped gracefully and recorded as `skipped` in the session -
 the report still works with whatever you have installed.
@@ -100,9 +100,26 @@ Library tools: run in-process, the runner monitors memory either way.
 - IDA: adapter follows IDA 9.x headless semantics (`idat -A -S script -o db`).
   On installs with a broken/nonstandard `idat` loader chain it will record a
   clean failure instead of a bogus number.
-- Binary Ninja / angr: not yet implemented beyond detection (stubs raise
-  `NotImplementedError` and show as skipped).
-- PE-focused right now; ELF corpus support is a natural next step.
+- Binary Ninja: needs the `binaryninja` python package and a license installed;
+  otherwise it shows as skipped.
+- angr: install with `pip install rebench[angr]` (pin `bitstring<5` included -
+  angr 10.x needs the 4.x bitstring API). Analysis runs in an isolated process
+  and is terminated on timeout.
+- Recovery ratio on static ELF builds counts every CRT/musl function the tool
+  finds, so ratios can far exceed 1.0 - read the `ground truth` column for
+  context. Name-match on unstripped builds is the precision check.
+
+## ELF corpus
+
+Building Linux binaries on Windows works through a cross toolchain, detected
+automatically in this order:
+
+1. `zig` (`zig cc -target x86_64-linux-musl -static`)
+2. `x86_64-linux-gnu-gcc` (any Debian/Ubuntu cross-gcc)
+
+If neither is present, ELF variants are skipped with a note and the corpus
+stays PE-only. Install zig (`winget install zig`) and re-run
+`rebench corpus build` to get `*-linux-*` binaries.
 
 ## Development
 
@@ -110,5 +127,7 @@ Library tools: run in-process, the runner monitors memory either way.
 .venv\Scripts\python -m pytest tests -q
 ```
 
-Tests skip gracefully when a tool or a Windows PE isn't available; the Ghidra
-adapter is covered by a mock headless script so it's verified without Ghidra.
+Tests skip gracefully when a tool, a Windows PE, or a cross toolchain isn't
+available; the Ghidra adapter is covered by a mock headless script so it's
+verified without Ghidra, and angr/ELF tests build tiny binaries with zig on
+the fly.
