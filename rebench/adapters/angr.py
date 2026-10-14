@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import multiprocessing
+import json
+import sys
 from pathlib import Path
 
 from .base import AdapterResult, AnalysisFailedError, ToolAdapter, ToolNotInstalledError
+from .headless import run_headless_json
 from .registry import register
-from .util import apply_cpu_affinity, cpu_affinity_list, count_printable_runs, is_auto_name
+from .util import count_printable_runs, cpu_affinity_list, is_auto_name
 from ..models import ToolStatus
-
-NO_RESULT_TIMEOUT_S = 15.0
 
 
 def _len_or_zero(obj) -> int:
@@ -49,23 +49,26 @@ def _collect_stats(proj, binary_path: str) -> dict:
     }
 
 
-def _angr_worker(binary_path: str, queue) -> None:
+def _worker_main(binary_path: str, out_path: str) -> int:
+    import logging
+
+    for name in ("angr", "pyvex", "cle", "claripy", "pyvex.lifting"):
+        logging.getLogger(name).setLevel(logging.CRITICAL)
+
     try:
-        import logging
-
-        for name in ("angr", "pyvex", "cle", "claripy", "pyvex.lifting"):
-            logging.getLogger(name).setLevel(logging.CRITICAL)
-
         import angr
 
         proj = angr.Project(binary_path, auto_load_libs=False)
         proj.analyses.CFGFast(normalize=True, show_progressbar=False)
-        queue.put(("ok", _collect_stats(proj, binary_path)))
+        stats = _collect_stats(proj, binary_path)
+        Path(out_path).write_text(json.dumps(stats), encoding="utf-8")
+        return 0
     except Exception as e:
-        try:
-            queue.put(("error", f"{type(e).__name__}: {e}"))
-        except Exception:
-            pass
+        Path(out_path).write_text(
+            json.dumps({"error": f"{type(e).__name__}: {e}"}), encoding="utf-8"
+        )
+        print(f"angr worker failed: {type(e).__name__}: {e}", file=sys.stderr)
+        return 1
 
 
 @register
@@ -93,39 +96,35 @@ class AngrAdapter(ToolAdapter):
         if find_spec("angr") is None:
             raise ToolNotInstalledError("angr python package not installed")
 
-        ctx = multiprocessing.get_context("spawn")
-        queue = ctx.Queue()
-        proc = ctx.Process(
-            target=_angr_worker, args=(str(binary), queue), daemon=True
-        )
+        import tempfile
+
+        workdir = Path(tempfile.mkdtemp(prefix="rebench_angr_"))
+        out_json = workdir / "stats.json"
+        cmd = [
+            sys.executable,
+            "-m",
+            "rebench.adapters.angr",
+            str(binary),
+            str(out_json),
+        ]
         try:
-            proc.start()
-        except OSError as e:
-            raise AnalysisFailedError(f"failed to spawn angr worker: {e}") from e
-
-        cpus = cpu_affinity_list(threads)
-        if cpus:
-            try:
-                apply_cpu_affinity(proc.pid, cpus)
-            except RuntimeError as e:
-                proc.terminate()
-                raise AnalysisFailedError(f"angr: {e}") from None
-
-        proc.join(timeout=timeout_s)
-        if proc.is_alive():
-            proc.terminate()
-            proc.join(5)
-            raise AnalysisFailedError(f"angr timed out after {timeout_s:.0f}s")
-
-        if queue.empty():
-            raise AnalysisFailedError(
-                f"angr produced no result (exit code {proc.exitcode})"
+            run_headless_json(
+                cmd, out_json, timeout_s, "angr",
+                affinity_cpus=cpu_affinity_list(threads),
             )
-        try:
-            status, payload = queue.get(timeout=NO_RESULT_TIMEOUT_S)
-        except Exception:
-            raise AnalysisFailedError("angr result queue read failed") from None
+            stats = json.loads(out_json.read_text(encoding="utf-8"))
+        finally:
+            import shutil
 
-        if status == "error":
-            raise AnalysisFailedError(f"angr failed: {payload}")
-        return AdapterResult(stats=payload, notes="CFGFast, isolated subprocess")
+            shutil.rmtree(workdir, ignore_errors=True)
+
+        if "error" in stats:
+            raise AnalysisFailedError(f"angr failed: {stats['error']}")
+        return AdapterResult(stats=stats, notes="CFGFast, isolated subprocess")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("usage: python -m rebench.adapters.angr <binary> <out_json>", file=sys.stderr)
+        sys.exit(2)
+    sys.exit(_worker_main(sys.argv[1], sys.argv[2]))
