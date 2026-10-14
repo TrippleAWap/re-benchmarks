@@ -65,6 +65,7 @@ class ToolRun:
     stats: dict[str, Any] = field(default_factory=dict)
     artifacts: list[str] = field(default_factory=list)
     notes: str = ""
+    repeat: int = 0
 
 
 @dataclass
@@ -73,4 +74,5 @@ class SessionResult:
     started_at: str
     finished_at: str
     host: str
+    tag: str = ""
     runs: list[ToolRun] = field(default_factory=list)

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import platform
+from pathlib import Path
+from typing import Optional, List
 
 import typer
 from rich.console import Console
@@ -9,6 +11,7 @@ from rich.table import Table
 from . import __version__
 from .adapters import build_adapters
 from .config import Config
+from .models import SessionResult, ToolRun
 
 app = typer.Typer(no_args_is_help=True, help="Benchmark harness for RE tools.")
 console = Console()
@@ -48,6 +51,81 @@ def list_tools() -> None:
         )
     console.print(table)
     console.print(f"host: {platform.node()} ({platform.system()} {platform.release()})")
+
+
+@app.command()
+def run(
+    tools: Optional[str] = typer.Option(None, "--tools", "-t", help="Comma-separated tool names (default: all enabled)"),
+    binary: Optional[List[Path]] = typer.Option(None, "--binary", "-b", help="Binary file or directory (repeatable)"),
+    timeout_s: Optional[float] = typer.Option(None, "--timeout", help="Per-run timeout in seconds"),
+    repeats: Optional[int] = typer.Option(None, "--repeats", min=1, help="Repeats per tool/binary pair"),
+    tag: Optional[str] = typer.Option(None, "--tag", help="Label stored with the session"),
+) -> None:
+    """Run every available tool against the given binaries."""
+    from .runner import run_and_save
+
+    config = Config.load()
+    tool_names = [t.strip() for t in tools.split(",")] if tools else None
+    binary_paths = [Path(b) for b in binary] if binary else None
+
+    def on_run_end(run: ToolRun) -> None:
+        label = _run_mark(run)
+        console.print(
+            f"  [cyan]{run.tool:<12}[/cyan] {run.binary_name:<32} "
+            f"{run.wall_time_s:>8.2f}s {run.peak_mem_mb:>8.1f}MB {label}"
+        )
+
+    try:
+        session, out = run_and_save(
+            config,
+            tool_names=tool_names,
+            binary_paths=binary_paths,
+            timeout_s=timeout_s,
+            repeats=repeats,
+            on_run_end=on_run_end,
+        )
+    except FileNotFoundError as e:
+        console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if tag:
+        session.tag = tag
+        from .store import save_session
+
+        out = save_session(config.run.results_dir, session)
+
+    _print_summary(session)
+    console.print(f"[green]saved[/green] {out}")
+
+
+def _run_mark(run: ToolRun) -> str:
+    if run.skipped:
+        return f"[yellow]skipped[/yellow] {run.error}"
+    if not run.ok:
+        return f"[red]failed[/red] {run.error}"
+    return "[green]ok[/green]"
+
+
+def _print_summary(session: SessionResult) -> None:
+    if not session.runs:
+        return
+    table = Table(title=f"session {session.id}", expand=True)
+    table.add_column("tool", style="cyan")
+    table.add_column("binary")
+    table.add_column("time (s)", justify="right")
+    table.add_column("mem (MB)", justify="right")
+    table.add_column("status")
+    for r in session.runs:
+        status = "[green]ok[/green]" if r.ok else ("[yellow]skipped[/yellow]" if r.skipped else "[red]failed[/red]")
+        detail = "" if r.ok or not r.error else f" - {r.error}"
+        table.add_row(
+            r.tool,
+            r.binary_name,
+            f"{r.wall_time_s:.2f}",
+            f"{r.peak_mem_mb:.1f}",
+            f"{status}{detail}",
+        )
+    console.print(table)
 
 
 def main() -> None:
