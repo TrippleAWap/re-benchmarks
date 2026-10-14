@@ -8,17 +8,6 @@ from pathlib import Path
 from ..config import ToolConfig
 from ..models import AdapterResult, ToolStatus
 
-STAT_KEYS = (
-    "functions",
-    "named_functions",
-    "imports",
-    "exports",
-    "strings",
-    "symbols",
-    "sections",
-)
-
-
 class AdapterError(RuntimeError):
     pass
 

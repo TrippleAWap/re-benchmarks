@@ -1,20 +1,15 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
-import subprocess
 import tempfile
 import uuid
 from pathlib import Path
 
-from .base import (
-    AdapterResult,
-    AnalysisFailedError,
-    ToolAdapter,
-    ToolNotInstalledError,
-)
+from .base import AdapterResult, AnalysisFailedError, ToolAdapter, ToolNotInstalledError
+from .headless import run_headless_json
 from .registry import register
-from .util import kill_tree, tail
 from ..models import ToolStatus
 
 _SCRIPT_NAME = "rebench_dump.py"
@@ -79,50 +74,23 @@ class GhidraAdapter(ToolAdapter):
             raise AnalysisFailedError(f"post-script missing: {script}")
 
         workdir = Path(tempfile.mkdtemp(prefix="rebench_ghidra_"))
-        out_json = workdir / "stats.json"
-        project = f"rebench_{uuid.uuid4().hex[:8]}"
-        cmd = [
-            str(headless),
-            str(workdir),
-            project,
-            "-import",
-            str(binary),
-            "-deleteProject",
-            "-scriptPath",
-            str(self._script_dir()),
-            "-postScript",
-            _SCRIPT_NAME,
-            str(out_json),
-        ]
         try:
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
-            try:
-                out, _ = proc.communicate(timeout=timeout_s)
-            except subprocess.TimeoutExpired:
-                kill_tree(proc.pid)
-                raise AnalysisFailedError(
-                    f"ghidra timed out after {timeout_s:.0f}s"
-                ) from None
-        except OSError as e:
-            shutil.rmtree(workdir, ignore_errors=True)
-            raise AnalysisFailedError(f"failed to launch ghidra: {e}") from e
-
-        try:
-            if proc.returncode != 0:
-                raise AnalysisFailedError(
-                    f"ghidra exited with {proc.returncode}: {tail(out)}"
-                )
-            if not out_json.exists():
-                raise AnalysisFailedError(
-                    f"ghidra produced no stats file: {tail(out)}"
-                )
+            out_json = workdir / "stats.json"
+            project = f"rebench_{uuid.uuid4().hex[:8]}"
+            cmd = [
+                str(headless),
+                str(workdir),
+                project,
+                "-import",
+                str(binary),
+                "-deleteProject",
+                "-scriptPath",
+                str(self._script_dir()),
+                "-postScript",
+                _SCRIPT_NAME,
+                str(out_json),
+            ]
+            run_headless_json(cmd, out_json, timeout_s, "ghidra")
             stats = json.loads(out_json.read_text(encoding="utf-8"))
         finally:
             shutil.rmtree(workdir, ignore_errors=True)

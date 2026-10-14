@@ -69,6 +69,7 @@ def test_charts_with_scores(tmp_path):
         AccuracyScore("ghidra", "foo-d.exe", "a" * 64, 15, 3, 12, 1.25, 0.0),
         AccuracyScore("ida", "foo-sym.exe", "b" * 64, 12, 12, 12, 1.0, 1.0),
         AccuracyScore("r2", "foo-sym.exe", "b" * 64, 62, 12, 12, 5.17, 1.0),
+        AccuracyScore("r2", "foo-linux-sym", "c" * 64, 62, 12, 12, 5.17, 1.0),
     ]
     charts = make_charts(session, scores, tmp_path)
     names = [c.name for c in charts]
@@ -76,5 +77,5 @@ def test_charts_with_scores(tmp_path):
     assert "namematch.png" in names
     md = markdown_report(session, scores, charts)
     assert "## Function recovery" in md
-    assert f"![recovery]({tmp_path.name}/recovery.png)" not in md or True
     assert "recovery.png" in md
+    assert "namematch.png" in md

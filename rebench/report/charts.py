@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
+
+import numpy as np
 
 TOOL_COLORS = {
     "baseline": "#8a8a8a",
@@ -67,8 +70,6 @@ def aggregate_runs(runs) -> dict[tuple[str, str], dict]:
 
 
 def _grouped_bars(ax, agg, value_key, ylabel, title, log=False):
-    import numpy as np
-
     binaries = sorted({b for (_, b) in agg})
     tools = sorted({t for (t, _) in agg})
     width = 0.8 / max(1, len(tools))
@@ -121,7 +122,6 @@ def make_charts(session, scores, out_dir: Path) -> list[Path]:
         binaries = sorted({b for (_, b) in score_agg})
         tools = sorted({t for (t, _) in score_agg})
         width = 0.8 / max(1, len(tools))
-        import numpy as np
 
         x = np.arange(len(binaries))
         for i, tool in enumerate(tools):
@@ -144,7 +144,7 @@ def make_charts(session, scores, out_dir: Path) -> list[Path]:
         plt.close(fig)
         written.append(p)
 
-        sym_scores = [s for s in scores if ".sym." in s.binary_name or s.binary_name.endswith("-sym.exe")]
+        sym_scores = [s for s in scores if re.search(r"-sym(\.exe)?$", s.binary_name)]
         if sym_scores and any(s.name_match_ratio is not None for s in sym_scores):
             fig, ax = plt.subplots(figsize=(9, 5))
             sym_agg = {(s.tool, s.binary_name): s for s in sym_scores}

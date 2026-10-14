@@ -71,23 +71,19 @@ def score_session(session: SessionResult, manifest: dict) -> list[AccuracyScore]
     scores: list[AccuracyScore] = []
     for (tool, sha), pairs in grouped.items():
         entry = pairs[0][1]
-        n = len(pairs)
-        functions = pairs[-1][0].stats.get("functions", 0)
-        named = pairs[-1][0].stats.get("named_functions", 0)
-        recovery = sum(score_run(run, entry).recovery_ratio for run, _ in pairs) / n
-        name_ratios = [
-            score_run(run, entry).name_match_ratio
-            for run, _ in pairs
-            if score_run(run, entry).name_match_ratio is not None
-        ]
+        run_scores = [score_run(run, entry) for run, _ in pairs]
+        n = len(run_scores)
+        last = run_scores[-1]
+        recovery = sum(s.recovery_ratio for s in run_scores) / n
+        name_ratios = [s.name_match_ratio for s in run_scores if s.name_match_ratio is not None]
         name_ratio = sum(name_ratios) / len(name_ratios) if name_ratios else None
         scores.append(
             AccuracyScore(
                 tool=tool,
                 binary_name=entry["name"],
                 binary_sha256=sha,
-                functions=functions,
-                named_functions=named,
+                functions=last.functions,
+                named_functions=last.named_functions,
                 gt_functions=entry["ground_truth"]["function_count"],
                 recovery_ratio=recovery,
                 name_match_ratio=name_ratio,

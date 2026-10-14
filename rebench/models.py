@@ -38,9 +38,6 @@ class ToolStatus:
     version: str | None = None
     detail: str = ""
 
-    def not_installed(self, detail: str = "") -> "ToolStatus":
-        return ToolStatus(installed=False, path=None, version=None, detail=detail)
-
 
 @dataclass
 class AdapterResult:

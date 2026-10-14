@@ -34,27 +34,8 @@ def is_auto_name(name: str) -> bool:
 
 
 def json_len(chunk: str) -> int | None:
-    chunk = chunk.strip()
-    if not chunk:
-        return None
-    try:
-        obj = json.loads(chunk)
-        return len(obj) if isinstance(obj, list) else 1
-    except json.JSONDecodeError:
-        pass
-    decoder = json.JSONDecoder()
-    idx = 0
-    while idx < len(chunk):
-        while idx < len(chunk) and chunk[idx] not in "[{":
-            idx += 1
-        if idx >= len(chunk):
-            return None
-        try:
-            obj, end = decoder.raw_decode(chunk, idx)
-            return len(obj) if isinstance(obj, list) else 1
-        except json.JSONDecodeError:
-            idx += 1
-    return None
+    obj = first_json_list(chunk)
+    return len(obj) if obj is not None else None
 
 
 def first_json_list(chunk: str) -> list | None:

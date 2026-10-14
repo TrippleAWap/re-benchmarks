@@ -7,13 +7,7 @@ from pathlib import Path
 
 from ..models import sha256_file, utcnow
 
-PE_VARIANTS: dict[str, tuple[list[str], bool]] = {
-    "d": (["-O0"], True),
-    "o2": (["-O2"], True),
-    "sym": (["-O0", "-g"], False),
-}
-
-ELF_VARIANTS: dict[str, tuple[list[str], bool]] = {
+VARIANTS: dict[str, tuple[list[str], bool]] = {
     "d": (["-O0"], True),
     "o2": (["-O2"], True),
     "sym": (["-O0", "-g"], False),
@@ -123,7 +117,7 @@ def build_corpus(config, sources: list[Path] | None = None,
 
     for src in sources:
         if "pe" in formats:
-            for vtag, (flags, do_strip) in PE_VARIANTS.items():
+            for vtag, (flags, do_strip) in VARIANTS.items():
                 obj = build_dir / f"{src.stem}-{vtag}.o"
                 exe = out_dir / f"{src.stem}-{vtag}.exe"
                 _build_variant([gcc], flags, src, obj, exe)
@@ -131,7 +125,7 @@ def build_corpus(config, sources: list[Path] | None = None,
                                                vtag, "pe", config.root))
 
         if "elf" in formats and elf_cmd is not None:
-            for vtag, (flags, do_strip) in ELF_VARIANTS.items():
+            for vtag, (flags, do_strip) in VARIANTS.items():
                 obj = build_dir / f"{src.stem}-linux-{vtag}.o"
                 exe = out_dir / f"{src.stem}-linux-{vtag}"
                 _build_variant(elf_cmd, flags, src, obj, exe)

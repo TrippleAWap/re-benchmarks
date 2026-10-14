@@ -3,19 +3,13 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import subprocess
 import tempfile
 import uuid
 from pathlib import Path
 
-from .base import (
-    AdapterResult,
-    AnalysisFailedError,
-    ToolAdapter,
-    ToolNotInstalledError,
-)
+from .base import AdapterResult, AnalysisFailedError, ToolAdapter, ToolNotInstalledError
+from .headless import run_headless_json
 from .registry import register
-from .util import kill_tree, tail
 from ..models import ToolStatus
 
 _SCRIPT_NAME = "rebench_dump.py"
@@ -68,46 +62,19 @@ class IdaAdapter(ToolAdapter):
             raise AnalysisFailedError(f"IDA script missing: {src_script}")
 
         workdir = Path(tempfile.mkdtemp(prefix="rebench_ida_"))
-        out_json = workdir / "stats.json"
-        script = workdir / _SCRIPT_NAME
-        shutil.copyfile(src_script, script)
-        db_path = workdir / "rebench.i64"
-
-        env = dict(os.environ)
-        env.setdefault("TVHEADLESS", "1")
-
-        s_arg = f"-S{_SCRIPT_NAME} {out_json.name}"
-        cmd = [str(idat), "-A", s_arg, f"-o{db_path}", str(binary)]
-
         try:
-            proc = subprocess.Popen(
-                cmd,
-                cwd=str(workdir),
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
-            try:
-                out, _ = proc.communicate(timeout=timeout_s)
-            except subprocess.TimeoutExpired:
-                kill_tree(proc.pid)
-                raise AnalysisFailedError(
-                    f"ida timed out after {timeout_s:.0f}s"
-                ) from None
-        except OSError as e:
-            shutil.rmtree(workdir, ignore_errors=True)
-            raise AnalysisFailedError(f"failed to launch ida: {e}") from e
+            out_json = workdir / "stats.json"
+            script = workdir / _SCRIPT_NAME
+            shutil.copyfile(src_script, script)
+            db_path = workdir / "rebench.i64"
 
-        try:
-            if proc.returncode != 0:
-                raise AnalysisFailedError(
-                    f"ida exited with {proc.returncode}: {tail(out)}"
-                )
-            if not out_json.exists():
-                raise AnalysisFailedError(f"ida produced no stats file: {tail(out)}")
+            env = dict(os.environ)
+            env.setdefault("TVHEADLESS", "1")
+
+            s_arg = f"-S{_SCRIPT_NAME} {out_json.name}"
+            cmd = [str(idat), "-A", s_arg, f"-o{db_path}", str(binary)]
+
+            run_headless_json(cmd, out_json, timeout_s, "ida", cwd=workdir, env=env)
             stats = json.loads(out_json.read_text(encoding="utf-8"))
         finally:
             shutil.rmtree(workdir, ignore_errors=True)
