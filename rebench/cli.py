@@ -84,17 +84,12 @@ def run(
             binary_paths=binary_paths,
             timeout_s=timeout_s,
             repeats=repeats,
+            tag=tag,
             on_run_end=on_run_end,
         )
     except FileNotFoundError as e:
         console.print(f"[red]error:[/red] {e}")
         raise typer.Exit(1)
-
-    if tag:
-        session.tag = tag
-        from .store import save_session
-
-        out = save_session(config.run.results_dir, session)
 
     _print_summary(session)
     console.print(f"[green]saved[/green] {out}")
@@ -185,6 +180,34 @@ def _print_summary(session: SessionResult) -> None:
             f"{status}{detail}",
         )
     console.print(table)
+
+
+@app.command("ui")
+def ui(
+    tools: Optional[str] = typer.Option(None, "--tools", "-t", help="Comma-separated tool names (default: all enabled)"),
+    binary: Optional[List[Path]] = typer.Option(None, "--binary", "-b", help="Binary file or directory (repeatable)"),
+    timeout_s: Optional[float] = typer.Option(None, "--timeout", help="Per-run timeout in seconds"),
+    repeats: Optional[int] = typer.Option(None, "--repeats", min=1, help="Repeats per tool/binary pair"),
+    tag: Optional[str] = typer.Option(None, "--tag", help="Label stored with the session"),
+) -> None:
+    """Run benchmarks in a live TUI dashboard."""
+    try:
+        from .tui.dashboard import BenchApp
+    except ImportError:
+        console.print("[red]error:[/red] textual missing - install with: pip install rebench[tui]")
+        raise typer.Exit(1)
+
+    config = Config.load()
+    tool_names = [t.strip() for t in tools.split(",")] if tools else None
+    app = BenchApp(
+        config,
+        tool_names=tool_names,
+        binary_paths=[Path(b) for b in binary] if binary else None,
+        timeout_s=timeout_s,
+        repeats=repeats,
+        tag=tag,
+    )
+    app.run()
 
 
 @app.command("report")

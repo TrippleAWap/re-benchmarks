@@ -157,6 +157,7 @@ def run_session(
     binary_paths: list[Path] | None = None,
     timeout_s: float | None = None,
     repeats: int | None = None,
+    tag: str | None = None,
     on_run_start=None,
     on_run_end=None,
 ) -> SessionResult:
@@ -175,6 +176,7 @@ def run_session(
         started_at=utcnow().isoformat(),
         finished_at="",
         host=socket.gethostname(),
+        tag=tag or "",
     )
 
     probes: dict[str, ToolStatus] = {}
@@ -209,12 +211,38 @@ def run_session(
     return session
 
 
+def estimate_runs(
+    config: Config,
+    tool_names: list[str] | None = None,
+    binary_paths: list[Path] | None = None,
+    repeats: int | None = None,
+) -> tuple[int, int, int]:
+    repeats = repeats if repeats is not None else max(1, config.run.repeats)
+    binaries = collect_binaries(config, binary_paths)
+    adapters = build_adapters(config)
+    if tool_names:
+        wanted = set(tool_names)
+        adapters = [a for a in adapters if a.name in wanted]
+    runnable = 0
+    for adapter in adapters:
+        if not adapter.config.enabled:
+            continue
+        try:
+            if adapter.probe().installed:
+                runnable += 1
+        except Exception:
+            continue
+    total = len(binaries) * runnable * repeats
+    return total, len(binaries), runnable
+
+
 def run_and_save(
     config: Config,
     tool_names: list[str] | None = None,
     binary_paths: list[Path] | None = None,
     timeout_s: float | None = None,
     repeats: int | None = None,
+    tag: str | None = None,
     on_run_start=None,
     on_run_end=None,
 ) -> tuple[SessionResult, Path]:
@@ -224,6 +252,7 @@ def run_and_save(
         binary_paths=binary_paths,
         timeout_s=timeout_s,
         repeats=repeats,
+        tag=tag,
         on_run_start=on_run_start,
         on_run_end=on_run_end,
     )
