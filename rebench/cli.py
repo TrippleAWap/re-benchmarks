@@ -15,6 +15,8 @@ from .models import SessionResult, ToolRun
 
 app = typer.Typer(no_args_is_help=True, help="Benchmark harness for RE tools.")
 console = Console()
+corpus_app = typer.Typer(no_args_is_help=True, help="Build and inspect the binary corpus.")
+app.add_typer(corpus_app, name="corpus")
 
 
 @app.callback()
@@ -96,6 +98,63 @@ def run(
 
     _print_summary(session)
     console.print(f"[green]saved[/green] {out}")
+
+
+@corpus_app.command("build")
+def corpus_build() -> None:
+    """Compile corpus sources and record ground-truth manifest."""
+    from .corpus.builder import build_corpus
+
+    config = Config.load()
+    try:
+        manifest = build_corpus(config)
+    except Exception as e:
+        console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(1)
+    table = Table(title="corpus built", expand=True)
+    table.add_column("binary", style="cyan")
+    table.add_column("variant")
+    table.add_column("gt functions", justify="right")
+    table.add_column("size", justify="right")
+    table.add_column("sha256", style="dim")
+    for entry in manifest["entries"]:
+        table.add_row(
+            entry["name"],
+            entry["variant"],
+            str(entry["ground_truth"]["function_count"]),
+            f"{entry['size_bytes'] / 1024:.0f}K",
+            entry["sha256"][:12],
+        )
+    console.print(table)
+    console.print(f"[green]manifest saved[/green] {config.corpus.manifest}")
+
+
+@corpus_app.command("list")
+def corpus_list() -> None:
+    """Show binaries and ground truth from the manifest."""
+    from .corpus.builder import load_manifest
+
+    config = Config.load()
+    try:
+        manifest = load_manifest(config.corpus.manifest)
+    except Exception as e:
+        console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(1)
+    table = Table(title=f"corpus (generated {manifest.get('generated', '?')})", expand=True)
+    table.add_column("binary", style="cyan")
+    table.add_column("source")
+    table.add_column("variant")
+    table.add_column("gt functions", justify="right")
+    table.add_column("path", overflow="fold")
+    for entry in manifest["entries"]:
+        table.add_row(
+            entry["name"],
+            entry.get("source", "-"),
+            entry.get("variant", "-"),
+            str(entry["ground_truth"]["function_count"]),
+            entry.get("path", "-"),
+        )
+    console.print(table)
 
 
 def _run_mark(run: ToolRun) -> str:

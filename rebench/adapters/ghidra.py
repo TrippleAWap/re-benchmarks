@@ -131,6 +131,7 @@ class GhidraAdapter(ToolAdapter):
             stats={
                 "functions": int(stats.get("functions", 0)),
                 "named_functions": int(stats.get("named_functions", 0)),
+                "function_names": list(stats.get("function_names", []))[:10000],
                 "imports": int(stats.get("imports", 0)),
                 "exports": int(stats.get("exports", 0)),
                 "symbols": int(stats.get("symbols", 0)),

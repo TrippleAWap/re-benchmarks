@@ -13,11 +13,13 @@ fm = program.getFunctionManager()
 
 functions = 0
 named = 0
+names = []
 func_iter = fm.getFunctions(True)
 while func_iter.hasNext():
     f = func_iter.next()
     functions += 1
     name = f.getName()
+    names.append(name)
     if not (name.startswith("FUN_") or name.startswith("thunk_FUN_")):
         named += 1
 
@@ -52,6 +54,7 @@ while data_iter.hasNext():
 result = {
     "functions": functions,
     "named_functions": named,
+    "function_names": names[:10000],
     "symbols": symbols,
     "imports": imports,
     "exports": exports,

@@ -120,5 +120,6 @@ class R2Adapter(ToolAdapter):
             "exports": json_len(sections.get("exports", "")) or 0,
             "sections": json_len(sections.get("sections", "")) or 0,
             "strings": json_len(sections.get("strings", "")) or 0,
+            "function_names": names[:10000],
         }
         return AdapterResult(stats=stats, notes="analysis: aaa")

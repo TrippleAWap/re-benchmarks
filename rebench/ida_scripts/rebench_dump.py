@@ -23,9 +23,11 @@ AUTO_PREFIXES = (
 
 functions = 0
 named = 0
+names = []
 for ea in idautils.Functions():
     functions += 1
     name = idc.get_func_name(ea) or ""
+    names.append(name)
     if name and not name.startswith(AUTO_PREFIXES):
         named += 1
 
@@ -50,6 +52,7 @@ strings = sum(1 for _ in idautils.Strings())
 result = {
     "functions": functions,
     "named_functions": named,
+    "function_names": names[:10000],
     "imports": imports,
     "exports": exports,
     "symbols": symbols,
