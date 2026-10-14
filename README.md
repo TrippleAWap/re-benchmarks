@@ -81,10 +81,30 @@ enabled = false
 
 ## Metrics
 
-- **wall time** per analysis and **peak memory** (process tree, psutil)
+- **wall time**, **cpu time**, and **avg parallelism** (cpu/wall) per analysis
+- **peak threads** and **peak memory** (process tree, psutil)
 - **functions found** vs ground truth -> `recovery_ratio`
 - **name match ratio** on unstripped builds (who reads symbol tables correctly)
 - imports / exports / strings / symbols counts per tool
+
+## Thread capping
+
+Tools use wildly different parallelism (r2 is single-core, Ghidra melts all
+cores), so rebench can cap every tool to N cores via **cpu affinity** - the
+process tree is pinned to N logical cpus and the cap is inherited by child
+processes. Single-threaded tools are unaffected; multi-threaded tools get
+exactly what you allow. The cap is verified (a failed pin fails the run
+instead of silently skewing numbers).
+
+```toml
+[run]
+threads = 4          # global default (0 = all cores)
+
+[tools.ghidra]
+threads = 2          # per-tool override
+```
+
+or one-off: `rebench run --threads 4` / `rebench ui --threads 4`.
 
 ## Adding a tool
 

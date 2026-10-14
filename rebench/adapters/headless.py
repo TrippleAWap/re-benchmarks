@@ -13,13 +13,15 @@ def run_headless_json(
     tool: str,
     cwd: Path | None = None,
     env: dict | None = None,
+    affinity_cpus: list[int] | None = None,
 ) -> str:
     """Run a headless tool that must write stats JSON to out_json.
 
     Returns the captured stdout. Raises AnalysisFailedError on timeout,
-    nonzero exit, or missing output file.
+    nonzero exit, missing output file, or failed affinity capping.
     """
     from .base import AnalysisFailedError
+    from .util import apply_cpu_affinity
 
     try:
         proc = subprocess.Popen(
@@ -34,6 +36,13 @@ def run_headless_json(
         )
     except OSError as e:
         raise AnalysisFailedError(f"failed to launch {tool}: {e}") from e
+
+    if affinity_cpus:
+        try:
+            apply_cpu_affinity(proc.pid, affinity_cpus)
+        except RuntimeError as e:
+            kill_tree(proc.pid)
+            raise AnalysisFailedError(f"{tool}: {e}") from None
 
     try:
         out, _ = proc.communicate(timeout=timeout_s)

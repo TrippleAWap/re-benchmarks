@@ -19,19 +19,28 @@ class ResourceMonitor:
     def __init__(self, interval_s: float = 0.05):
         self.interval_s = interval_s
         self._peak_bytes = 0
+        self._cpu_s = 0.0
+        self._peak_threads = 0
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._proc = psutil.Process()
 
     def _sample(self) -> None:
         procs = [self._proc, *self._proc.children(recursive=True)]
-        total = 0
+        total_bytes = 0
+        total_cpu = 0.0
+        total_threads = 0
         for p in procs:
             try:
-                total += p.memory_info().rss
+                total_bytes += p.memory_info().rss
+                ct = p.cpu_times()
+                total_cpu += ct.user + ct.system
+                total_threads += p.num_threads()
             except psutil.Error:
                 pass
-        self._peak_bytes = max(self._peak_bytes, total)
+        self._peak_bytes = max(self._peak_bytes, total_bytes)
+        self._cpu_s = max(self._cpu_s, total_cpu)
+        self._peak_threads = max(self._peak_threads, total_threads)
 
     def _loop(self) -> None:
         while not self._stop.is_set():
@@ -52,6 +61,14 @@ class ResourceMonitor:
     @property
     def peak_mb(self) -> float:
         return self._peak_bytes / (1024 * 1024)
+
+    @property
+    def cpu_s(self) -> float:
+        return self._cpu_s
+
+    @property
+    def peak_threads(self) -> int:
+        return self._peak_threads
 
 
 def collect_binaries(config: Config, explicit: list[Path] | None = None) -> list[Path]:
@@ -77,6 +94,16 @@ def collect_binaries(config: Config, explicit: list[Path] | None = None) -> list
     )
 
 
+def resolve_threads(adapter: ToolAdapter, config: Config,
+                    override: int | None = None) -> int:
+    if override is not None and override > 0:
+        return override
+    tc = adapter.config
+    if tc.threads is not None:
+        return int(tc.threads)
+    return int(config.run.threads)
+
+
 def run_single(
     session_id: str,
     adapter: ToolAdapter,
@@ -84,12 +111,13 @@ def run_single(
     binary: BinaryInfo,
     timeout_s: float,
     repeat: int = 0,
+    threads: int = 0,
 ) -> ToolRun:
     started = utcnow()
     t0 = time.perf_counter()
     with ResourceMonitor() as mon:
         try:
-            result = adapter.analyze(binary.path, timeout_s=timeout_s)
+            result = adapter.analyze(binary.path, timeout_s=timeout_s, threads=threads)
             wall = time.perf_counter() - t0
             return ToolRun(
                 session=session_id,
@@ -103,6 +131,9 @@ def run_single(
                 ok=True,
                 skipped=False,
                 error="",
+                cpu_time_s=round(mon.cpu_s, 2),
+                peak_threads=mon.peak_threads,
+                threads_limit=threads,
                 stats=result.stats,
                 artifacts=[str(a) for a in result.artifacts],
                 notes=result.notes,
@@ -111,11 +142,11 @@ def run_single(
         except NotImplementedError as e:
             wall = time.perf_counter() - t0
             return _skipped_run(session_id, adapter, tool_version, binary, started, wall,
-                                f"adapter not implemented: {e}", repeat)
+                                f"adapter not implemented: {e}", repeat, threads)
         except ToolNotInstalledError as e:
             wall = time.perf_counter() - t0
             return _skipped_run(session_id, adapter, tool_version, binary, started, wall,
-                                str(e), repeat)
+                                str(e), repeat, threads)
         except AdapterError as e:
             wall = time.perf_counter() - t0
             return ToolRun(
@@ -130,11 +161,15 @@ def run_single(
                 ok=False,
                 skipped=False,
                 error=str(e),
+                cpu_time_s=round(mon.cpu_s, 2),
+                peak_threads=mon.peak_threads,
+                threads_limit=threads,
                 repeat=repeat,
             )
 
 
-def _skipped_run(session_id, adapter, tool_version, binary, started: str, wall, reason, repeat) -> ToolRun:
+def _skipped_run(session_id, adapter, tool_version, binary, started: str, wall, reason, repeat,
+                 threads: int = 0) -> ToolRun:
     return ToolRun(
         session=session_id,
         tool=adapter.name,
@@ -147,6 +182,7 @@ def _skipped_run(session_id, adapter, tool_version, binary, started: str, wall, 
         ok=False,
         skipped=True,
         error=reason,
+        threads_limit=threads,
         repeat=repeat,
     )
 
@@ -158,6 +194,7 @@ def run_session(
     timeout_s: float | None = None,
     repeats: int | None = None,
     tag: str | None = None,
+    threads: int | None = None,
     on_run_start=None,
     on_run_end=None,
 ) -> SessionResult:
@@ -190,19 +227,22 @@ def run_session(
         info = BinaryInfo.from_path(path)
         for adapter in adapters:
             status = probes[adapter.name]
+            limit = resolve_threads(adapter, config, override=threads)
             for rep in range(repeats):
                 if on_run_start is not None:
                     on_run_start(adapter, info, rep)
                 if not adapter.config.enabled:
                     run = _skipped_run(session_id, adapter, status.version, info,
-                                       utcnow().isoformat(), 0.0, "disabled in config", rep)
+                                       utcnow().isoformat(), 0.0, "disabled in config", rep,
+                                       limit)
                 elif not status.installed:
                     run = _skipped_run(session_id, adapter, status.version, info,
                                        utcnow().isoformat(), 0.0,
-                                       status.detail or "not installed", rep)
+                                       status.detail or "not installed", rep,
+                                       limit)
                 else:
                     run = run_single(session_id, adapter, status.version, info,
-                                     timeout_s, repeat=rep)
+                                     timeout_s, repeat=rep, threads=limit)
                 session.runs.append(run)
                 if on_run_end is not None:
                     on_run_end(run)
@@ -243,6 +283,7 @@ def run_and_save(
     timeout_s: float | None = None,
     repeats: int | None = None,
     tag: str | None = None,
+    threads: int | None = None,
     on_run_start=None,
     on_run_end=None,
 ) -> tuple[SessionResult, Path]:
@@ -253,6 +294,7 @@ def run_and_save(
         timeout_s=timeout_s,
         repeats=repeats,
         tag=tag,
+        threads=threads,
         on_run_start=on_run_start,
         on_run_end=on_run_end,
     )

@@ -95,6 +95,51 @@ def detect_format(path: Path) -> str:
     raise ValueError(f"unsupported binary format: {magic!r}")
 
 
+def cpu_affinity_list(limit: int) -> list[int] | None:
+    if limit is None or limit <= 0:
+        return None
+    n = psutil.cpu_count(logical=True) or 1
+    return list(range(max(1, min(limit, n))))
+
+
+def apply_cpu_affinity(pid: int, cpus: list[int]) -> None:
+    proc = psutil.Process(pid)
+    try:
+        proc.cpu_affinity(cpus)
+    except (psutil.Error, OSError) as e:
+        raise RuntimeError(f"failed to set cpu affinity: {e}") from e
+    current = proc.cpu_affinity()
+    if sorted(current) != sorted(cpus):
+        raise RuntimeError(
+            f"cpu affinity verification failed: set {cpus}, got {current}"
+        )
+
+
+class cpu_affinity_scope:
+    def __init__(self, limit: int):
+        self.cpus = cpu_affinity_list(limit)
+        self._previous: list[int] | None = None
+
+    def __enter__(self) -> "cpu_affinity_scope":
+        if self.cpus is None:
+            return self
+        proc = psutil.Process()
+        try:
+            self._previous = proc.cpu_affinity()
+            proc.cpu_affinity(self.cpus)
+        except (psutil.Error, OSError):
+            self._previous = None
+        return self
+
+    def __exit__(self, *exc) -> bool:
+        if self._previous:
+            try:
+                psutil.Process().cpu_affinity(self._previous)
+            except (psutil.Error, OSError):
+                pass
+        return False
+
+
 def kill_tree(pid: int) -> None:
     try:
         parent = psutil.Process(pid)

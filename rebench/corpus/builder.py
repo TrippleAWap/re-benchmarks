@@ -147,7 +147,8 @@ def build_corpus(config, sources: list[Path] | None = None,
 
 
 def _manifest_entry(nm: str, strip: str, do_strip: bool, obj: Path, exe: Path,
-                    src: Path, vtag: str, fmt: str, root: Path) -> dict:
+                    src: Path, vtag: str, fmt: str, root: Path,
+                    extra: dict | None = None) -> dict:
     obj_names = set(dump_function_names(nm, obj))
     linked_names = set(dump_function_names(nm, exe))
     gt_names = sorted(obj_names & linked_names)
@@ -157,7 +158,7 @@ def _manifest_entry(nm: str, strip: str, do_strip: bool, obj: Path, exe: Path,
         if strip_proc.returncode != 0:
             raise CorpusBuildError(f"strip failed for {exe}: {strip_proc.stderr[-400:]}")
 
-    return {
+    entry = {
         "name": exe.name,
         "source": src.name,
         "variant": vtag,
@@ -170,6 +171,49 @@ def _manifest_entry(nm: str, strip: str, do_strip: bool, obj: Path, exe: Path,
             "function_count": len(gt_names),
         },
     }
+    if extra:
+        entry.update(extra)
+    return entry
+
+
+def build_scale_corpus(config, tiers: list[int], strip_binaries: bool = True) -> dict:
+    gcc = _require_tool("gcc")
+    nm = _require_tool("nm")
+    strip = _require_tool("strip")
+
+    gen_dir = config.root / "corpus" / "generated"
+    out_dir = config.corpus.dir / "scale"
+    build_dir = config.root / "corpus" / "build"
+    gen_dir.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    build_dir.mkdir(parents=True, exist_ok=True)
+
+    from .generator import generate_scale_source, scale_binary_name
+
+    new_entries = []
+    for n in tiers:
+        src = gen_dir / f"{scale_binary_name(n)}.c"
+        src.write_text(generate_scale_source(n), encoding="utf-8")
+        obj = build_dir / f"{scale_binary_name(n)}-d.o"
+        exe = out_dir / f"{scale_binary_name(n)}-d.exe"
+        _build_variant([gcc], ["-O0"], src, obj, exe)
+        new_entries.append(
+            _manifest_entry(nm, strip, strip_binaries, obj, exe, src, "d", "pe",
+                            config.root, extra={"scale": True, "tier": n})
+        )
+
+    manifest = {}
+    if config.corpus.manifest.exists():
+        manifest = json.loads(config.corpus.manifest.read_text(encoding="utf-8"))
+    kept = [e for e in manifest.get("entries", []) if not e["name"].startswith("scale_")]
+    manifest["entries"] = kept + new_entries
+    manifest["scale_tiers"] = tiers
+    manifest["generated"] = utcnow().isoformat()
+    config.corpus.manifest.parent.mkdir(parents=True, exist_ok=True)
+    config.corpus.manifest.write_text(
+        json.dumps(manifest, indent=2), encoding="utf-8"
+    )
+    return manifest
 
 
 def load_manifest(path: Path) -> dict:

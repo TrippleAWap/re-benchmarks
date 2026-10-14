@@ -61,6 +61,7 @@ def run(
     binary: Optional[List[Path]] = typer.Option(None, "--binary", "-b", help="Binary file or directory (repeatable)"),
     timeout_s: Optional[float] = typer.Option(None, "--timeout", help="Per-run timeout in seconds"),
     repeats: Optional[int] = typer.Option(None, "--repeats", min=1, help="Repeats per tool/binary pair"),
+    threads: Optional[int] = typer.Option(None, "--threads", min=1, help="Cap every tool to N cpu cores (0 = unlimited)"),
     tag: Optional[str] = typer.Option(None, "--tag", help="Label stored with the session"),
 ) -> None:
     """Run every available tool against the given binaries."""
@@ -74,7 +75,8 @@ def run(
         label = _run_mark(run)
         console.print(
             f"  [cyan]{run.tool:<12}[/cyan] {run.binary_name:<32} "
-            f"{run.wall_time_s:>8.2f}s {run.peak_mem_mb:>8.1f}MB {label}"
+            f"{run.wall_time_s:>8.2f}s {run.cpu_time_s:>8.2f}cpu "
+            f"{run.peak_mem_mb:>8.1f}MB {run.peak_threads:>4}thr {label}"
         )
 
     try:
@@ -85,6 +87,7 @@ def run(
             timeout_s=timeout_s,
             repeats=repeats,
             tag=tag,
+            threads=threads,
             on_run_end=on_run_end,
         )
     except FileNotFoundError as e:
@@ -158,6 +161,49 @@ def corpus_list() -> None:
     console.print(table)
 
 
+@corpus_app.command("scale")
+def corpus_scale(
+    tiers: str = typer.Option("100,500,2000,5000", "--tiers", help="Comma-separated function counts, e.g. 100,500,2000,5000"),
+    no_strip: bool = typer.Option(False, "--no-strip", help="Keep symbols in scale binaries"),
+) -> None:
+    """Generate and build scaling binaries (N functions per tier)."""
+    from .corpus.builder import build_scale_corpus
+
+    config = Config.load()
+    tier_list = []
+    for t in tiers.split(","):
+        t = t.strip()
+        if not t:
+            continue
+        n = int(t)
+        if n < 2:
+            console.print(f"[red]error:[/red] tier must be >= 2: {n}")
+            raise typer.Exit(1)
+        tier_list.append(n)
+    try:
+        manifest = build_scale_corpus(config, tier_list, strip_binaries=not no_strip)
+    except Exception as e:
+        console.print(f"[red]error:[/red] {e}")
+        raise typer.Exit(1)
+    table = Table(title="scale corpus built", expand=True)
+    table.add_column("binary", style="cyan")
+    table.add_column("tier functions", justify="right")
+    table.add_column("gt functions", justify="right")
+    table.add_column("size", justify="right")
+    for entry in manifest["entries"]:
+        if not entry.get("scale"):
+            continue
+        table.add_row(
+            entry["name"],
+            str(entry["tier"]),
+            str(entry["ground_truth"]["function_count"]),
+            f"{entry['size_bytes'] / 1024:.0f}K",
+        )
+    console.print(table)
+    console.print(f"[green]manifest saved[/green] {config.corpus.manifest}")
+    console.print("run with: [bold]rebench run --binary corpus/binaries/scale --timeout 3600[/bold]")
+
+
 def _run_mark(run: ToolRun) -> str:
     if run.skipped:
         return f"[yellow]skipped[/yellow] {run.error}"
@@ -173,6 +219,8 @@ def _print_summary(session: SessionResult) -> None:
     table.add_column("tool", style="cyan")
     table.add_column("binary")
     table.add_column("time (s)", justify="right")
+    table.add_column("cpu (s)", justify="right")
+    table.add_column("threads", justify="right")
     table.add_column("mem (MB)", justify="right")
     table.add_column("status")
     for r in session.runs:
@@ -182,6 +230,8 @@ def _print_summary(session: SessionResult) -> None:
             r.tool,
             r.binary_name,
             f"{r.wall_time_s:.2f}",
+            f"{r.cpu_time_s:.2f}",
+            str(r.peak_threads),
             f"{r.peak_mem_mb:.1f}",
             f"{status}{detail}",
         )
@@ -194,6 +244,7 @@ def ui(
     binary: Optional[List[Path]] = typer.Option(None, "--binary", "-b", help="Binary file or directory (repeatable)"),
     timeout_s: Optional[float] = typer.Option(None, "--timeout", help="Per-run timeout in seconds"),
     repeats: Optional[int] = typer.Option(None, "--repeats", min=1, help="Repeats per tool/binary pair"),
+    threads: Optional[int] = typer.Option(None, "--threads", min=1, help="Cap every tool to N cpu cores (0 = unlimited)"),
     tag: Optional[str] = typer.Option(None, "--tag", help="Label stored with the session"),
 ) -> None:
     """Run benchmarks in a live TUI dashboard."""
@@ -211,6 +262,7 @@ def ui(
         binary_paths=[Path(b) for b in binary] if binary else None,
         timeout_s=timeout_s,
         repeats=repeats,
+        threads=threads,
         tag=tag,
     )
     app.run()
@@ -224,7 +276,7 @@ def report(
     """Render charts and a markdown report for a benchmark session."""
     from .corpus.builder import load_manifest
     from .metrics.compare import score_session
-    from .report.charts import make_charts
+    from .report.charts import make_charts, make_scaling_chart
     from .report.summary import markdown_report
     from .store import list_sessions, load_session
 
@@ -243,21 +295,32 @@ def report(
 
     session = load_session(path)
     scores = []
+    scale_entries: list[dict] = []
+    scaling_chart = None
+    out_dir = out or (config.run.results_dir / f"report-{session.id}")
+    out_dir.mkdir(parents=True, exist_ok=True)
     try:
         manifest = load_manifest(config.corpus.manifest)
         scores = score_session(session, manifest)
+        scaling_chart = make_scaling_chart(session, manifest, out_dir)
+        scale_entries = [e for e in manifest.get("entries", []) if e.get("scale")]
     except Exception as e:
         console.print(f"[yellow]accuracy scoring unavailable:[/yellow] {e}")
 
-    out_dir = out or (config.run.results_dir / f"report-{session.id}")
     try:
         charts = make_charts(session, scores, out_dir)
     except ImportError:
         console.print("[red]error:[/red] matplotlib missing - install with: pip install rebench[charts]")
         raise typer.Exit(1)
 
+    if scaling_chart is not None:
+        charts = [c for c in charts if c.name != "scaling.png"] + [scaling_chart]
+
     md = out_dir / "report.md"
-    md.write_text(markdown_report(session, scores, charts), encoding="utf-8")
+    md.write_text(
+        markdown_report(session, scores, charts, scaling_chart, scale_entries),
+        encoding="utf-8",
+    )
 
     for c in charts:
         console.print(f"  [blue]chart[/blue] {c}")

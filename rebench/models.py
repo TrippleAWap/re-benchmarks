@@ -59,6 +59,9 @@ class ToolRun:
     ok: bool
     skipped: bool
     error: str
+    cpu_time_s: float = 0.0
+    peak_threads: int = 0
+    threads_limit: int = 0
     stats: dict[str, Any] = field(default_factory=dict)
     artifacts: list[str] = field(default_factory=list)
     notes: str = ""

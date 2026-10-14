@@ -12,6 +12,7 @@ class ToolConfig:
     enabled: bool = True
     path: str | None = None
     install_dir: str | None = None
+    threads: int | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -20,6 +21,7 @@ class RunConfig:
     timeout_s: float = 600.0
     repeats: int = 1
     results_dir: Path = Path("results")
+    threads: int = 0
 
 
 @dataclass
@@ -49,6 +51,7 @@ class Config:
             timeout_s=float(run_data.get("timeout_s", RunConfig.timeout_s)),
             repeats=int(run_data.get("repeats", RunConfig.repeats)),
             results_dir=_resolve(root, run_data.get("results_dir", RunConfig.results_dir)),
+            threads=int(run_data.get("threads", RunConfig.threads)),
         )
 
         corpus_data = data.get("corpus", {}) or {}
@@ -67,7 +70,8 @@ class Config:
                 enabled=bool(td.get("enabled", True)),
                 path=td.get("path"),
                 install_dir=td.get("install_dir"),
-                extra={k: v for k, v in td.items() if k not in {"enabled", "path", "install_dir"}},
+                threads=td.get("threads"),
+                extra={k: v for k, v in td.items() if k not in {"enabled", "path", "install_dir", "threads"}},
             )
 
         return cls(root=root, run=run, corpus=corpus, tools=tools)

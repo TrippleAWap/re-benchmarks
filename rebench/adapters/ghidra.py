@@ -10,6 +10,7 @@ from pathlib import Path
 from .base import AdapterResult, AnalysisFailedError, ToolAdapter, ToolNotInstalledError
 from .headless import run_headless_json
 from .registry import register
+from .util import cpu_affinity_list
 from ..models import ToolStatus
 
 _SCRIPT_NAME = "rebench_dump.py"
@@ -65,7 +66,7 @@ class GhidraAdapter(ToolAdapter):
             v = parent.name.replace("ghidra_", "").replace("ghidra", "").strip("_ ")
         return ToolStatus(installed=True, path=str(headless), version=v, detail=str(parent))
 
-    def analyze(self, binary: Path, timeout_s: float) -> AdapterResult:
+    def analyze(self, binary: Path, timeout_s: float, threads: int = 0) -> AdapterResult:
         headless = _find_headless(self.config.install_dir)
         if headless is None:
             raise ToolNotInstalledError("ghidra headless not found")
@@ -90,7 +91,8 @@ class GhidraAdapter(ToolAdapter):
                 _SCRIPT_NAME,
                 str(out_json),
             ]
-            run_headless_json(cmd, out_json, timeout_s, "ghidra")
+            run_headless_json(cmd, out_json, timeout_s, "ghidra",
+                              affinity_cpus=cpu_affinity_list(threads))
             stats = json.loads(out_json.read_text(encoding="utf-8"))
         finally:
             shutil.rmtree(workdir, ignore_errors=True)

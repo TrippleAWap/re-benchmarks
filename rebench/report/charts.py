@@ -59,11 +59,17 @@ def aggregate_runs(runs) -> dict[tuple[str, str], dict]:
         grouped.setdefault((run.tool, run.binary_name), []).append(run)
     agg = {}
     for key, rs in grouped.items():
+        n = len(rs)
+        wall = sum(r.wall_time_s for r in rs) / n
+        cpu = sum(r.cpu_time_s for r in rs) / n
         agg[key] = {
             "tool": rs[0].tool,
             "binary": rs[0].binary_name,
-            "time": sum(r.wall_time_s for r in rs) / len(rs),
-            "mem": sum(r.peak_mem_mb for r in rs) / len(rs),
+            "time": wall,
+            "cpu": cpu,
+            "parallelism": (cpu / wall) if wall > 0 else 0.0,
+            "threads": max(r.peak_threads for r in rs),
+            "mem": sum(r.peak_mem_mb for r in rs) / n,
             "functions": rs[-1].stats.get("functions", 0),
         }
     return agg
@@ -85,6 +91,59 @@ def _grouped_bars(ax, agg, value_key, ylabel, title, log=False):
         ax.set_yscale("log")
     ax.grid(True, axis="y", alpha=0.5)
     ax.legend(frameon=False)
+
+
+def make_scaling_chart(session, manifest: dict, out_dir: Path,
+                       kind: str = "wall") -> Path | None:
+    scale_entries = {e["name"]: e for e in manifest.get("entries", []) if e.get("scale")}
+    if not scale_entries:
+        return None
+
+    value_key = "cpu_time_s" if kind == "cpu" else "wall_time_s"
+    data: dict[tuple[str, int], list[float]] = {}
+    for run in session.runs:
+        if run.skipped or not run.ok:
+            continue
+        entry = scale_entries.get(run.binary_name)
+        if entry is None:
+            continue
+        data.setdefault((run.tool, int(entry["tier"])), []).append(getattr(run, value_key))
+    if not data:
+        return None
+
+    _setup_mpl()
+    import matplotlib.pyplot as plt
+
+    tiers = sorted({t for (_, t) in data})
+    tools = sorted({t for (t, _) in data})
+    fig, ax = plt.subplots(figsize=(9, 5))
+    for tool in tools:
+        xs = [tier for tier in tiers if (tool, tier) in data]
+        ys = [sum(data[(tool, tier)]) / len(data[(tool, tier)]) for tier in xs]
+        if not xs:
+            continue
+        ax.plot(xs, ys, marker="o", label=tool, color=_color(tool))
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xticks(tiers)
+    ax.get_xaxis().set_major_formatter(plt.ScalarFormatter())
+    ax.set_xlabel("functions in binary (scale tier)")
+    if kind == "cpu":
+        ax.set_ylabel("avg cpu time (s)")
+        title = f"cpu time scaling - session {session.id}"
+        fname = "scaling-cpu.png"
+    else:
+        ax.set_ylabel("avg wall time (s)")
+        title = f"analysis time scaling - session {session.id}"
+        fname = "scaling.png"
+    ax.set_title(title)
+    ax.grid(True, which="both", alpha=0.3)
+    ax.legend(frameon=False)
+    fig.tight_layout()
+    p = out_dir / fname
+    fig.savefig(p, dpi=150)
+    plt.close(fig)
+    return p
 
 
 def make_charts(session, scores, out_dir: Path) -> list[Path]:

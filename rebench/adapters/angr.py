@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .base import AdapterResult, AnalysisFailedError, ToolAdapter, ToolNotInstalledError
 from .registry import register
-from .util import count_printable_runs, is_auto_name
+from .util import apply_cpu_affinity, cpu_affinity_list, count_printable_runs, is_auto_name
 from ..models import ToolStatus
 
 NO_RESULT_TIMEOUT_S = 15.0
@@ -87,7 +87,7 @@ class AngrAdapter(ToolAdapter):
             v = None
         return ToolStatus(installed=True, version=v, detail="python angr")
 
-    def analyze(self, binary: Path, timeout_s: float) -> AdapterResult:
+    def analyze(self, binary: Path, timeout_s: float, threads: int = 0) -> AdapterResult:
         from importlib.util import find_spec
 
         if find_spec("angr") is None:
@@ -102,6 +102,14 @@ class AngrAdapter(ToolAdapter):
             proc.start()
         except OSError as e:
             raise AnalysisFailedError(f"failed to spawn angr worker: {e}") from e
+
+        cpus = cpu_affinity_list(threads)
+        if cpus:
+            try:
+                apply_cpu_affinity(proc.pid, cpus)
+            except RuntimeError as e:
+                proc.terminate()
+                raise AnalysisFailedError(f"angr: {e}") from None
 
         proc.join(timeout=timeout_s)
         if proc.is_alive():

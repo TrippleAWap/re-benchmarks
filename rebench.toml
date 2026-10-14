@@ -2,6 +2,8 @@
 timeout_s = 600
 repeats = 1
 results_dir = "results"
+# cap every tool to N cpu cores during analysis (0 = use all cores)
+threads = 0
 
 [corpus]
 dir = "corpus/binaries"
@@ -18,6 +20,7 @@ enabled = true
 [tools.ghidra]
 enabled = true
 # install_dir = "C:\\ghidra_11.3.2_PUBLIC"
+# threads = 8   # per-tool cap overrides [run] threads
 
 [tools.ida]
 enabled = true

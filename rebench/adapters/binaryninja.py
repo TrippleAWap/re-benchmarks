@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .base import AdapterResult, AnalysisFailedError, ToolAdapter, ToolNotInstalledError
 from .registry import register
+from .util import cpu_affinity_scope
 from ..models import ToolStatus
 
 _AUTO_PREFIXES = ("sub_", "nullptr_sub_", "unexpected_pop_", " thunk", "?")
@@ -29,7 +30,7 @@ class BinaryNinjaAdapter(ToolAdapter):
             v = None
         return ToolStatus(installed=True, version=v, detail="python binaryninja")
 
-    def analyze(self, binary: Path, timeout_s: float) -> AdapterResult:
+    def analyze(self, binary: Path, timeout_s: float, threads: int = 0) -> AdapterResult:
         try:
             import binaryninja
         except ImportError as e:
@@ -38,7 +39,8 @@ class BinaryNinjaAdapter(ToolAdapter):
         holder: dict = {}
 
         def _work() -> dict:
-            bv = binaryninja.load(str(binary))
+            with cpu_affinity_scope(threads):
+                bv = binaryninja.load(str(binary))
             if bv is None:
                 raise AnalysisFailedError("binary ninja failed to open binary")
             holder["bv"] = bv

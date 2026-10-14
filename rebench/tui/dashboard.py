@@ -22,6 +22,7 @@ class BenchApp(App):
         binary_paths: list[Path] | None = None,
         timeout_s: float | None = None,
         repeats: int | None = None,
+        threads: int | None = None,
         tag: str | None = None,
     ):
         super().__init__()
@@ -30,6 +31,7 @@ class BenchApp(App):
         self.binary_paths = binary_paths
         self.timeout_s = timeout_s
         self.repeats = repeats
+        self.threads = threads
         self.tag = tag
         self._completed = 0
         self._total = 0
@@ -45,7 +47,7 @@ class BenchApp(App):
     def on_mount(self) -> None:
         table = self.query_one("#runs", DataTable)
         table.cursor_type = "row"
-        table.add_columns("tool", "binary", "time (s)", "mem (MB)", "functions", "status")
+        table.add_columns("tool", "binary", "time (s)", "cpu (s)", "threads", "mem (MB)", "functions", "status")
         log = self.query_one("#log", RichLog)
         log.write("[bold cyan]rebench[/] starting - press [bold]q[/] to quit")
         self.run_worker(self._work, thread=True, exclusive=True)
@@ -84,6 +86,7 @@ class BenchApp(App):
                 binary_paths=self.binary_paths,
                 timeout_s=self.timeout_s,
                 repeats=self.repeats,
+                threads=self.threads,
                 on_run_start=on_start,
                 on_run_end=on_end,
                 tag=self.tag,
@@ -121,6 +124,8 @@ class BenchApp(App):
             run.tool,
             run.binary_name,
             f"{run.wall_time_s:.2f}",
+            f"{run.cpu_time_s:.2f}",
+            str(run.peak_threads),
             f"{run.peak_mem_mb:.1f}",
             funcs,
             status,

@@ -34,7 +34,8 @@ class ToolAdapter(ABC):
     def probe(self) -> ToolStatus: ...
 
     @abstractmethod
-    def analyze(self, binary: Path, timeout_s: float) -> AdapterResult: ...
+    def analyze(self, binary: Path, timeout_s: float, threads: int = 0) -> AdapterResult:
+        """Run analysis. threads > 0 caps the tool to that many cpu cores."""
 
 
 def find_on_path(names: tuple[str, ...]) -> Path | None:

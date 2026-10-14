@@ -12,7 +12,16 @@ from .base import (
     unwrap_batch_launcher,
 )
 from .registry import register
-from .util import first_json_list, is_auto_name, json_len, parse_marked_sections, tail
+from .util import (
+    apply_cpu_affinity,
+    cpu_affinity_list,
+    first_json_list,
+    is_auto_name,
+    json_len,
+    kill_tree,
+    parse_marked_sections,
+    tail,
+)
 from ..models import ToolStatus
 
 _SEARCH_DIRS = (
@@ -76,31 +85,44 @@ class R2Adapter(ToolAdapter):
             return f'cmd /d /s /c "{inner}"'
         return [str(exe)] + args
 
-    def analyze(self, binary: Path, timeout_s: float) -> AdapterResult:
+    def analyze(self, binary: Path, timeout_s: float, threads: int = 0) -> AdapterResult:
         exe = self._resolve_exe()
         if exe is None:
             raise ToolNotInstalledError("r2/rizin not found")
         cmd = self._build_cmd(exe, binary)
+        affinity = cpu_affinity_list(threads)
         try:
-            proc = subprocess.run(
+            proc = subprocess.Popen(
                 cmd,
-                capture_output=True,
+                shell=isinstance(cmd, str),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=timeout_s,
                 encoding="utf-8",
                 errors="replace",
             )
-        except subprocess.TimeoutExpired:
-            raise AnalysisFailedError(f"r2 timed out after {timeout_s:.0f}s") from None
         except OSError as e:
             raise AnalysisFailedError(f"failed to launch r2: {e}") from e
 
+        if affinity:
+            try:
+                apply_cpu_affinity(proc.pid, affinity)
+            except RuntimeError as e:
+                kill_tree(proc.pid)
+                raise AnalysisFailedError(f"r2: {e}") from None
+
+        try:
+            out, err = proc.communicate(timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            kill_tree(proc.pid)
+            raise AnalysisFailedError(f"r2 timed out after {timeout_s:.0f}s") from None
+
         if proc.returncode != 0:
             raise AnalysisFailedError(
-                f"r2 exited with {proc.returncode}: {tail(proc.stderr or proc.stdout)}"
+                f"r2 exited with {proc.returncode}: {tail(err or out)}"
             )
 
-        sections = parse_marked_sections(proc.stdout)
+        sections = parse_marked_sections(out)
         functions_chunk = sections.get("functions", "")
         n_functions = json_len(functions_chunk)
         if n_functions is None:

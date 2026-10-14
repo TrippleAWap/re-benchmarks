@@ -25,7 +25,7 @@ class BaselineAdapter(ToolAdapter):
         elf = "ELF supported" if find_spec("elftools") else "ELF needs pyelftools"
         return ToolStatus(installed=True, version=v, detail=f"python pefile, {elf}")
 
-    def analyze(self, binary: Path, timeout_s: float) -> AdapterResult:
+    def analyze(self, binary: Path, timeout_s: float, threads: int = 0) -> AdapterResult:
         try:
             fmt = detect_format(binary)
         except ValueError as e:

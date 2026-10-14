@@ -10,6 +10,7 @@ from pathlib import Path
 from .base import AdapterResult, AnalysisFailedError, ToolAdapter, ToolNotInstalledError
 from .headless import run_headless_json
 from .registry import register
+from .util import cpu_affinity_list
 from ..models import ToolStatus
 
 _SCRIPT_NAME = "rebench_dump.py"
@@ -53,7 +54,7 @@ class IdaAdapter(ToolAdapter):
         return ToolStatus(installed=True, path=str(idat), version=v or None,
                           detail=str(idat.parent))
 
-    def analyze(self, binary: Path, timeout_s: float) -> AdapterResult:
+    def analyze(self, binary: Path, timeout_s: float, threads: int = 0) -> AdapterResult:
         idat = _find_idat(self.config.install_dir)
         if idat is None:
             raise ToolNotInstalledError("ida headless (idat) not found")
@@ -74,7 +75,8 @@ class IdaAdapter(ToolAdapter):
             s_arg = f"-S{_SCRIPT_NAME} {out_json.name}"
             cmd = [str(idat), "-A", s_arg, f"-o{db_path}", str(binary)]
 
-            run_headless_json(cmd, out_json, timeout_s, "ida", cwd=workdir, env=env)
+            run_headless_json(cmd, out_json, timeout_s, "ida", cwd=workdir, env=env,
+                              affinity_cpus=cpu_affinity_list(threads))
             stats = json.loads(out_json.read_text(encoding="utf-8"))
         finally:
             shutil.rmtree(workdir, ignore_errors=True)
