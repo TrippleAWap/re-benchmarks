@@ -29,10 +29,10 @@ def test_baseline_stats():
 
 def test_run_skips_uninstalled_adapters():
     config = Config.load()
-    session = run_session(config, tool_names=["ida", "baseline"], binary_paths=[PING])
+    session = run_session(config, tool_names=["ghidra", "baseline"], binary_paths=[PING])
     by_tool = {r.tool: r for r in session.runs}
     assert by_tool["baseline"].ok
-    assert by_tool["ida"].skipped
+    assert by_tool["ghidra"].skipped
 
 
 def test_store_roundtrip(tmp_path):

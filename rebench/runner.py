@@ -134,14 +134,14 @@ def run_single(
             )
 
 
-def _skipped_run(session_id, adapter, tool_version, binary, started, wall, reason, repeat) -> ToolRun:
+def _skipped_run(session_id, adapter, tool_version, binary, started: str, wall, reason, repeat) -> ToolRun:
     return ToolRun(
         session=session_id,
         tool=adapter.name,
         tool_version=tool_version,
         binary_name=binary.path.name,
         binary_sha256=binary.sha256,
-        started=started.isoformat(),
+        started=started,
         wall_time_s=round(wall, 4),
         peak_mem_mb=0.0,
         ok=False,

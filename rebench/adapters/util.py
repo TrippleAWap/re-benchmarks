@@ -7,7 +7,13 @@ import psutil
 AUTO_NAME_PREFIXES = (
     "fcn.",
     "loc.",
+    "locret.",
     "sub.",
+    "loc_",
+    "locret_",
+    "sub_",
+    "j_",
+    "nullsub_",
     "sym.func.",
     "sym.imp.",
     "imp.",
