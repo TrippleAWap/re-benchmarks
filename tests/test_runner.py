@@ -27,12 +27,11 @@ def test_baseline_stats():
     assert run.wall_time_s > 0
 
 
-def test_run_skips_unimplemented_adapters():
+def test_run_skips_uninstalled_adapters():
     config = Config.load()
-    session = run_session(config, tool_names=["r2", "ida", "baseline"], binary_paths=[PING])
+    session = run_session(config, tool_names=["ida", "baseline"], binary_paths=[PING])
     by_tool = {r.tool: r for r in session.runs}
     assert by_tool["baseline"].ok
-    assert by_tool["r2"].skipped
     assert by_tool["ida"].skipped
 
 

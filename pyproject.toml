@@ -24,3 +24,6 @@ rebench = "rebench.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["rebench*"]
+
+[tool.setuptools.package-data]
+rebench = ["ghidra_scripts/*.py", "ida_scripts/*.py"]
